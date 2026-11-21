@@ -4,17 +4,17 @@ import type { SerializedDockview } from "dockview";
 // Kept apart from settings.json so a corrupt layout never costs the user their settings.
 let store: Store | null = null;
 
-export async function loadLayout(): Promise<SerializedDockview | null> {
+export async function loadLayout(key = "layout"): Promise<SerializedDockview | null> {
   try {
-    store = await load("layout.json", { defaults: {}, autoSave: false });
-    return ((await store.get("layout")) as SerializedDockview | undefined) ?? null;
+    store ??= await load("layout.json", { defaults: {}, autoSave: false });
+    return ((await store.get(key)) as SerializedDockview | undefined) ?? null;
   } catch {
     return null;
   }
 }
 
-export async function saveLayout(layout: SerializedDockview): Promise<void> {
+export async function saveLayout(layout: SerializedDockview, key = "layout"): Promise<void> {
   if (!store) return;
-  await store.set("layout", layout);
+  await store.set(key, layout);
   await store.save();
 }
