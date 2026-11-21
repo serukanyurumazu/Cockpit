@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adapters, shellLine } from "./adapters";
+import { adapters, shellLine, unityBuildLine } from "./adapters";
 
 describe("claude adapter", () => {
   const a = adapters.claude;
@@ -37,6 +37,16 @@ describe("antigravity adapter", () => {
     expect(a.onHook({ event: "PreInvocation" })).toBe("working");
     expect(a.onHook({ event: "Stop" })).toBe("idle");
     expect(a.launch({ paths: {}, resume: true, sessionId: "c1" }).args).toEqual(["--conversation", "c1"]);
+  });
+});
+
+describe("unityBuildLine", () => {
+  it("waits for the GUI exe on Windows and reports the exit code", () => {
+    const l = unityBuildLine("C:/Program Files/Unity/Unity.exe", "C:/p q", "Build.Run", true);
+    expect(l).toBe("& 'C:/Program Files/Unity/Unity.exe' '-batchmode' '-quit' '-projectPath' 'C:/p q' '-executeMethod' 'Build.Run' '-logFile' '-' | Out-Host; \"Unity çıkış kodu: $LASTEXITCODE\"");
+  });
+  it("uses sh quoting elsewhere", () => {
+    expect(unityBuildLine("/Applications/Unity", "/p", "B.R", false)).toBe('/Applications/Unity -batchmode -quit -projectPath /p -executeMethod B.R -logFile -; echo "Unity çıkış kodu: $?"');
   });
 });
 

@@ -130,6 +130,17 @@ const antigravity: AgentAdapter = {
 
 export const adapters: Record<AgentId, AgentAdapter> = { claude, codex, antigravity };
 
+/**
+ * Unity batch build/run line. On Windows, Unity.exe is a GUI-subsystem binary: PowerShell would not
+ * wait for it, so stdout is piped through Out-Host (waits, streams -logFile - output).
+ */
+export function unityBuildLine(editor: string, project: string, method: string, windows: boolean): string {
+  const args = ["-batchmode", "-quit", "-projectPath", project, "-executeMethod", method, "-logFile", "-"];
+  return windows
+    ? `${shellLine(editor, args, true)} | Out-Host; "Unity çıkış kodu: $LASTEXITCODE"`
+    : `${shellLine(editor, args, false)}; echo "Unity çıkış kodu: $?"`;
+}
+
 /** One command line for the user's shell: PowerShell on Windows, POSIX sh elsewhere. */
 export function shellLine(bin: string, args: string[], windows: boolean): string {
   if (windows) {

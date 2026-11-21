@@ -148,7 +148,11 @@
       (async () => {
         let env: Record<string, string> | undefined;
         let shell_line: string | undefined;
-        const program = !adapter && opts.shell ? [opts.shell] : null;
+        const program = !adapter && opts.shell && !ctx.state.run ? [opts.shell] : null;
+        if (!adapter && typeof ctx.state.run === "string") {
+          shell_line = ctx.state.run; // e.g. a Unity batch build started from the Proje panel
+          if (typeof ctx.state.title === "string") ctx.setTitle(ctx.state.title);
+        }
         if (adapter) {
           const folder = cwd?.split(/[\\/]/).filter(Boolean).pop();
           ctx.setTitle(folder ? `${adapter.title} · ${folder}` : adapter.title);

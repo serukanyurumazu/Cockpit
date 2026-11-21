@@ -10,6 +10,8 @@ export interface ModuleCtx {
   setTitle(title: string): void;
   onVisibility(cb: (visible: boolean) => void): () => void;
   onLayout(cb: () => void): () => void;
+  /** Opens another module's panel below this one (both stay visible). */
+  openPanel(component: string, params: Record<string, unknown>): void;
 }
 
 export interface CockpitModule {

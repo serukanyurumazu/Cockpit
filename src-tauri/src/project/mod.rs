@@ -155,6 +155,90 @@ async fn tail_stop(state: State<'_, Tails>, id: String) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UnityInfo {
+    version: Option<String>,
+    editor: Option<String>,
+    /// Temp/UnityLockfile is held: the project is open in an editor, so a batch build would fail
+    locked: bool,
+    mcp_package: bool,
+    /// which agent CLIs have an MCP server whose name mentions unity
+    mcp_clients: Vec<String>,
+}
+
+fn editor_candidates<R: Runtime>(app: &AppHandle<R>, version: &str) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    #[cfg(windows)]
+    {
+        roots.push(PathBuf::from(r"C:\Program Files\Unity\Hub\Editor"));
+        // Hub's custom install location
+        if let Ok(cfg) = app.path().config_dir() {
+            if let Ok(s) = std::fs::read_to_string(cfg.join("UnityHub").join("secondaryInstallPath.json")) {
+                let p = s.trim().trim_matches('"').replace("\\\\", "\\");
+                if !p.is_empty() { roots.push(PathBuf::from(p)); }
+            }
+        }
+        roots.into_iter().map(|r| r.join(version).join("Editor").join("Unity.exe")).collect()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        roots.push(PathBuf::from("/Applications/Unity/Hub/Editor"));
+        roots.into_iter().map(|r| r.join(version).join("Unity.app/Contents/MacOS/Unity")).collect()
+    }
+}
+
+fn lock_held(lock: &Path) -> bool {
+    if !lock.exists() {
+        return false;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // An editor keeps the lockfile open without sharing; a stale file (after a crash) opens fine.
+        std::fs::OpenOptions::new().read(true).write(true).share_mode(0).open(lock).is_err()
+    }
+    #[cfg(not(windows))]
+    {
+        true // shortcut: on macOS any lockfile counts as held (stale after a crash too); check with flock if that bites
+    }
+}
+
+fn mentions_unity_mcp(text: &str) -> bool {
+    let t = text.to_lowercase();
+    t.contains("unitymcp") || t.contains("unity-mcp") || t.contains("unity_mcp") || t.contains("mcp_servers.unity") || t.contains("mcpforunity")
+}
+
+#[tauri::command]
+async fn unity_info<R: Runtime>(app: AppHandle<R>, path: String) -> Result<UnityInfo, String> {
+    let dir = project_dir(&path)?;
+    let version = std::fs::read_to_string(dir.join("ProjectSettings").join("ProjectVersion.txt")).ok()
+        .and_then(|s| s.lines().find_map(|l| l.strip_prefix("m_EditorVersion:").map(|v| v.trim().to_string())));
+    let editor = version.as_deref().and_then(|v| editor_candidates(&app, v).into_iter().find(|p| p.is_file()))
+        .map(|p| p.to_string_lossy().into_owned());
+    let manifest = std::fs::read_to_string(dir.join("Packages").join("manifest.json")).unwrap_or_default();
+    let home = app.path().home_dir().map_err(|e| e.to_string())?;
+    let read = |p: PathBuf| std::fs::read_to_string(p).unwrap_or_default();
+    let mut mcp_clients = Vec::new();
+    for (name, file) in [
+        ("Claude", home.join(".claude.json")),
+        ("Codex", home.join(".codex").join("config.toml")),
+        ("Antigravity", home.join(".gemini").join("config").join("mcp_config.json")),
+    ] {
+        if mentions_unity_mcp(&read(file)) {
+            mcp_clients.push(name.to_string());
+        }
+    }
+    Ok(UnityInfo {
+        version,
+        editor,
+        locked: lock_held(&dir.join("Temp").join("UnityLockfile")),
+        mcp_package: manifest.contains("com.coplaydev.unity-mcp") || manifest.contains("unity-mcp"),
+        mcp_clients,
+    })
+}
+
 fn tasks_file(path: &str) -> Result<PathBuf, String> {
     Ok(project_dir(path)?.join(".cockpit").join("brain").join("TASKS.md"))
 }
@@ -187,7 +271,7 @@ async fn write_tasks(path: String, expected: String, content: String) -> Result<
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("project")
         .invoke_handler(tauri::generate_handler![
-            git_status, git_stamp, unity_default_log, is_unity_project, tail_start, tail_stop, read_tasks, write_tasks
+            git_status, git_stamp, unity_default_log, is_unity_project, tail_start, tail_stop, read_tasks, write_tasks, unity_info
         ])
         .setup(|app, _| {
             app.manage(Tails::default());

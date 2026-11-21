@@ -25,7 +25,7 @@
   // Native browser webviews paint above HTML, so they hide while a drag or modal covers them.
   const cover = (on: boolean) => window.dispatchEvent(new CustomEvent("cockpit:cover", { detail: on }));
 
-  function addPanel(component: string, params: Record<string, unknown> = {}) {
+  function addPanel(component: string, params: Record<string, unknown> = {}, below?: string) {
     if (!api) return;
     const mod = registry.get(component);
     api.addPanel({
@@ -33,7 +33,11 @@
       component,
       title: mod?.title ?? component,
       params,
-      position: api.activeGroup ? { referenceGroup: api.activeGroup } : undefined,
+      position: below
+        ? { referencePanel: below, direction: "below" }
+        : api.activeGroup
+          ? { referenceGroup: api.activeGroup }
+          : undefined,
     });
   }
 
@@ -138,6 +142,8 @@
                   const d = containerApi.onDidLayoutChange(cb);
                   return () => d.dispose();
                 },
+                // opened next to (below) the caller so both stay visible, e.g. build output under Proje
+                openPanel: (component, params) => addPanel(component, params, panel.id),
               };
               view = mod.createView(element, ctx);
             },
