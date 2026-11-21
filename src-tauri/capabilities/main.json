@@ -15,6 +15,7 @@
     "dialog:default",
     "notification:default",
     "core:window:allow-destroy",
-    "project:default"
+    "project:default",
+    "brain:default"
   ]
 }

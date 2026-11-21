@@ -24,6 +24,12 @@ fn main() {
                 .default_permission(DefaultPermissionRule::AllowAllCommands),
         )
         .plugin(
+            "brain",
+            InlinedPlugin::new()
+                .commands(&["vault_for_project", "list", "search", "backlinks", "read", "write", "add_agent_pointer", "index_db"])
+                .default_permission(DefaultPermissionRule::AllowAllCommands),
+        )
+        .plugin(
             "browser",
             InlinedPlugin::new()
                 .commands(&["open", "set_bounds", "navigate", "action"])

@@ -1,3 +1,4 @@
+mod brain;
 mod browser;
 mod hooks;
 mod project;
@@ -18,6 +19,7 @@ pub fn run() {
         .plugin(browser::init())
         .plugin(hooks::init())
         .plugin(project::init())
+        .plugin(brain::init())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
