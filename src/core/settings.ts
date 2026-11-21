@@ -15,7 +15,7 @@ export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
   terminal: { shell: null, fontSize: 13, scrollback: 5000 },
   browser: { home: "https://github.com" },
-  agents: { claude: { args: [] }, codex: { args: [] }, gemini: { args: [] } },
+  agents: { claude: { args: [] }, codex: { args: [] }, antigravity: { args: [] } },
 };
 
 /** Fills missing keys from defaults and upgrades old versions. Unknown/invalid input yields defaults. */

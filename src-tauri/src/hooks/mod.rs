@@ -122,14 +122,16 @@ fn handle<R: Runtime>(app: &AppHandle<R>, mut stream: TcpStream) {
             .filter(char::is_ascii_alphanumeric)
             .take(16)
             .collect();
+        // Antigravity payloads carry no event name: the forwarder passes it as X-Cockpit-Event.
+        let header_event = req.header("x-cockpit-event").map(|e| e.chars().filter(char::is_ascii_alphanumeric).take(32).collect::<String>());
         let _ = app.emit(
             "agent:hook",
             HookEvent {
                 pane_id,
                 provider,
-                event: str_field(&body, &["hook_event_name", "type"]),
+                event: header_event.or_else(|| str_field(&body, &["hook_event_name", "type"])),
                 notification_type: str_field(&body, &["notification_type"]),
-                session_id: str_field(&body, &["session_id", "thread-id", "thread_id"]),
+                session_id: str_field(&body, &["session_id", "thread-id", "thread_id", "conversationId"]),
             },
         );
         Ok::<u16, u16>(204)
@@ -178,6 +180,38 @@ async fn write_config(state: State<'_, Hooks>, token: String, name: String, cont
     Ok(path.to_string_lossy().into_owned())
 }
 
+/// Antigravity CLI only reads hooks from files, so a single "cockpit-status" entry is merged into the
+/// user's global ~/.gemini/config/hooks.json (other entries untouched, original backed up once).
+/// Outside Cockpit the forwarder sees no token and exits 0, so the entry is inert there.
+#[tauri::command]
+async fn ensure_antigravity_hooks<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    let path = app.path().home_dir().map_err(|e| e.to_string())?.join(".gemini").join("config").join("hooks.json");
+    let original = std::fs::read_to_string(&path).ok();
+    let mut root: serde_json::Map<String, Value> = match &original {
+        Some(s) if !s.trim().is_empty() => serde_json::from_str(s).map_err(|e| format!("{}: {e} (not modified)", path.display()))?,
+        _ => Default::default(),
+    };
+    let handler = |event: &str| serde_json::json!([{ "type": "command", "command": format!("cockpit --hook antigravity {event}"), "timeout": 10 }]);
+    let entry = serde_json::json!({
+        "enabled": true,
+        "SessionStart": handler("SessionStart"),
+        "PreInvocation": handler("PreInvocation"),
+        "Stop": handler("Stop"),
+    });
+    if root.get("cockpit-status") == Some(&entry) {
+        return Ok(());
+    }
+    if let Some(s) = &original {
+        let backup = path.with_extension("json.cockpit-backup");
+        if !backup.exists() {
+            std::fs::write(&backup, s).map_err(|e| e.to_string())?;
+        }
+    }
+    root.insert("cockpit-status".into(), entry);
+    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    std::fs::write(&path, serde_json::to_string_pretty(&root).unwrap()).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn unregister(state: State<'_, Hooks>, token: String) -> Result<(), String> {
     if state.sessions.lock().unwrap().remove(&token).is_some() && token.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -188,7 +222,7 @@ async fn unregister(state: State<'_, Hooks>, token: String) -> Result<(), String
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("hooks")
-        .invoke_handler(tauri::generate_handler![register, write_config, unregister])
+        .invoke_handler(tauri::generate_handler![register, write_config, unregister, ensure_antigravity_hooks])
         .setup(|app, _| {
             let listener = TcpListener::bind("127.0.0.1:0")?;
             let port = listener.local_addr()?.port();
@@ -208,12 +242,13 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .build()
 }
 
-/// `cockpit --hook <provider> [json]`: forward hook JSON (stdin, or Codex's legacy notify argv)
+/// `cockpit --hook <provider> [event|json]`: forward hook JSON (stdin, or Codex's legacy notify argv)
 /// to the running app. Always exits 0 and prints nothing: hook stdout can become agent context.
 pub fn forward(args: &[String]) -> i32 {
     let (Ok(port), Ok(token)) = (std::env::var(ENV_PORT), std::env::var(ENV_TOKEN)) else { return 0 };
     let provider = args.first().map(String::as_str).unwrap_or("unknown");
-    let body = match args.get(1) {
+    let event = args.get(1).filter(|a| !a.starts_with('{')).cloned().unwrap_or_default();
+    let body = match args.get(1).filter(|a| a.starts_with('{')) {
         Some(json) => json.as_bytes().to_vec(),
         None => {
             let mut b = Vec::new();
@@ -227,7 +262,7 @@ pub fn forward(args: &[String]) -> i32 {
         let _ = s.set_write_timeout(Some(Duration::from_secs(2)));
         let _ = s.set_read_timeout(Some(Duration::from_secs(2)));
         let head = format!(
-            "POST /hook HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Cockpit-Token: {token}\r\nX-Cockpit-Provider: {provider}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            "POST /hook HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Cockpit-Token: {token}\r\nX-Cockpit-Provider: {provider}\r\nX-Cockpit-Event: {event}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
             body.len()
         );
         let _ = s.write_all(head.as_bytes()).and_then(|_| s.write_all(&body));

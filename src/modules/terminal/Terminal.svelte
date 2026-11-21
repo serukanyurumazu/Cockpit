@@ -153,6 +153,7 @@
           const folder = cwd?.split(/[\\/]/).filter(Boolean).pop();
           ctx.setTitle(folder ? `${adapter.title} · ${folder}` : adapter.title);
           trackAgent({ paneId: ctx.paneId, agent: adapter.id, title: adapter.title });
+          if (adapter.globalHooks) await invoke(adapter.globalHooks);
           const reg = await invoke<{ port: number; token: string }>("plugin:hooks|register", { paneId: ctx.paneId });
           hookToken = reg.token;
           const paths: Record<string, string> = {};

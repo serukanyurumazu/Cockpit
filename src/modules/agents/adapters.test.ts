@@ -31,6 +31,15 @@ describe("codex adapter", () => {
   });
 });
 
+describe("antigravity adapter", () => {
+  it("maps file-hook events and resumes by conversation id", () => {
+    const a = adapters.antigravity;
+    expect(a.onHook({ event: "PreInvocation" })).toBe("working");
+    expect(a.onHook({ event: "Stop" })).toBe("idle");
+    expect(a.launch({ paths: {}, resume: true, sessionId: "c1" }).args).toEqual(["--conversation", "c1"]);
+  });
+});
+
 describe("shellLine", () => {
   it("quotes for PowerShell", () => {
     expect(shellLine("claude", ["--settings", "C:/a b/it's.json"], true)).toBe("& 'claude' '--settings' 'C:/a b/it''s.json'");

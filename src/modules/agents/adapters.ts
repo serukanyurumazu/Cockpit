@@ -1,8 +1,8 @@
 // Agent adapters: how each local CLI is launched, hooked and resumed. Uses the CLI's own login
 // (never API keys). Adding a CLI = one entry here. Hook payload formats are CLI-version specific:
-// verified against claude 2.1.330, codex-cli 0.171.0, gemini 0.70.0.
+// verified against claude 2.1.330, codex-cli 0.171.0, agy 1.5.13.
 
-export type AgentId = "claude" | "codex" | "gemini";
+export type AgentId = "claude" | "codex" | "antigravity";
 export type AgentState = "unknown" | "working" | "idle" | "needs_input" | "exited";
 
 export interface HookSignal {
@@ -32,6 +32,8 @@ export interface AgentAdapter {
   configs(): Record<string, string>;
   launch(o: LaunchOptions): Launch;
   onHook(s: HookSignal): AgentState | undefined;
+  /** command that installs hooks a CLI only reads from a global file */
+  globalHooks?: string;
 }
 
 /** Constant hook command (resolvable via PATH) so Codex's hook-trust hash never changes. */
@@ -44,7 +46,6 @@ const commandHooks = (provider: AgentId, events: string[]) =>
 
 const CLAUDE_EVENTS = ["SessionStart", "UserPromptSubmit", "PostToolUse", "PermissionRequest", "Notification", "Stop", "StopFailure", "SessionEnd"];
 const CODEX_EVENTS = ["SessionStart", "UserPromptSubmit", "PostToolUse", "PermissionRequest", "Stop", "SessionEnd"];
-const GEMINI_EVENTS = ["SessionStart", "BeforeAgent", "AfterTool", "Notification", "AfterAgent", "SessionEnd"];
 
 const claude: AgentAdapter = {
   id: "claude",
@@ -104,37 +105,30 @@ const codex: AgentAdapter = {
   },
 };
 
-const gemini: AgentAdapter = {
-  id: "gemini",
-  title: "Gemini",
-  bin: "gemini",
-  configs: () => ({ "gemini-system-settings.json": JSON.stringify({ hooks: commandHooks("gemini", GEMINI_EVENTS) }) }),
-  launch({ paths, sessionId, resume }) {
-    const id = sessionId ?? crypto.randomUUID();
-    return {
-      args: resume && sessionId ? ["--resume", sessionId] : ["--session-id", id],
-      env: { GEMINI_CLI_SYSTEM_SETTINGS_PATH: paths["gemini-system-settings.json"] },
-      sessionId: id,
-    };
+// Antigravity CLI (agy), Google's successor to Gemini CLI. Hooks are file-only, so they live in the
+// global hooks.json (see ensure_antigravity_hooks); events carry no permission signal.
+const antigravity: AgentAdapter = {
+  id: "antigravity",
+  title: "Antigravity",
+  bin: "agy",
+  configs: () => ({}),
+  globalHooks: "plugin:hooks|ensure_antigravity_hooks",
+  launch({ sessionId, resume }) {
+    return { args: resume && sessionId ? ["--conversation", sessionId] : [], env: {} };
   },
   onHook({ event }) {
     switch (event) {
-      case "BeforeAgent":
-      case "AfterTool":
+      case "PreInvocation":
         return "working";
-      case "Notification":
-        return "needs_input";
       case "SessionStart":
-      case "AfterAgent":
+      case "Stop":
         return "idle";
-      case "SessionEnd":
-        return "exited";
     }
     return undefined;
   },
 };
 
-export const adapters: Record<AgentId, AgentAdapter> = { claude, codex, gemini };
+export const adapters: Record<AgentId, AgentAdapter> = { claude, codex, antigravity };
 
 /** One command line for the user's shell: PowerShell on Windows, POSIX sh elsewhere. */
 export function shellLine(bin: string, args: string[], windows: boolean): string {

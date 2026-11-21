@@ -11,7 +11,7 @@ fn main() {
         .plugin(
             "hooks",
             InlinedPlugin::new()
-                .commands(&["register", "write_config", "unregister"])
+                .commands(&["register", "write_config", "unregister", "ensure_antigravity_hooks"])
                 .default_permission(DefaultPermissionRule::AllowAllCommands),
         )
         .plugin(
