@@ -54,12 +54,14 @@
     term.onData((data) => pty("write", { data }));
     term.onResize(({ cols, rows }) => pty("resize", { cols, rows }));
 
-    // Image-only clipboard: forward Ctrl+V so CLIs (Claude Code) read the image themselves.
+    // Image-only clipboard: send the CLI's own image-paste key so it reads the clipboard itself.
+    // Claude Code binds this to Alt+V on Windows and Ctrl+V elsewhere.
+    const imagePasteKey = navigator.userAgent.includes("Windows") ? "\x1bv" : "\x16";
     const onPaste = (e: ClipboardEvent) => {
       if (!e.clipboardData?.getData("text/plain")) {
         e.preventDefault();
         e.stopPropagation();
-        pty("write", { data: "\x16" });
+        pty("write", { data: imagePasteKey });
       }
     };
     el.addEventListener("paste", onPaste, true);

@@ -266,6 +266,12 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("pty")
         .invoke_handler(tauri::generate_handler![spawn, write, resize, ack, kill])
         .setup(|app, _| {
+            // A parent that ignores Ctrl+C (some launchers/shells do) passes that flag on to every
+            // child, so \x03 from the terminal would never interrupt. Clear it before any spawn.
+            #[cfg(windows)]
+            unsafe {
+                windows_sys::Win32::System::Console::SetConsoleCtrlHandler(None, 0);
+            }
             app.manage(Sessions::default());
             Ok(())
         })
