@@ -52,6 +52,23 @@
 
     // Input is wired before spawn so ConPTY's ESC[6n query is answered immediately.
     term.onData((data) => pty("write", { data }));
+
+    // On Windows/Linux xterm turns Ctrl+V into ^V and swallows the paste event; let the browser
+    // paste instead (text via xterm's paste handler, images via onPaste below).
+    // Ctrl+C with a selection copies instead of interrupting.
+    const isMac = navigator.userAgent.includes("Mac");
+    term.attachCustomKeyEventHandler((ev) => {
+      if (isMac || ev.type !== "keydown" || !ev.ctrlKey || ev.altKey || ev.metaKey) return true;
+      const k = ev.key.toLowerCase();
+      if (k === "v") return false;
+      if (k === "c" && term.hasSelection()) {
+        navigator.clipboard.writeText(term.getSelection()).catch(() => {});
+        term.clearSelection();
+        ev.preventDefault();
+        return false;
+      }
+      return true;
+    });
     term.onResize(({ cols, rows }) => pty("resize", { cols, rows }));
 
     // Image-only clipboard: send the CLI's own image-paste key so it reads the clipboard itself.
