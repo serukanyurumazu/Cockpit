@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Privileged capability: only the local main webview (never child/browser webviews).",
+  "webviews": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "pty:default"
+  ]
+}
