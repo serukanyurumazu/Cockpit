@@ -7,6 +7,7 @@ import Placeholder from "./placeholder/Placeholder.svelte";
 import Unity from "./unity/Unity.svelte";
 import Routines from "./routines/Routines.svelte";
 import Dashboard from "./dashboard/Dashboard.svelte";
+import Repo from "./repo/Repo.svelte";
 
 // New features: add a folder under modules/ and register it here.
 register(svelteModule("terminal", "Terminal", Terminal));
@@ -18,3 +19,4 @@ register(svelteModule("dashboard", "Dashboard", Dashboard));
 register(svelteModule("routines", "Rutinler", Routines));
 register(svelteModule("unity", "Unity", Unity));
 register(svelteModule("cicd", "CI/CD", Placeholder));
+register(svelteModule("repo", "Repo", Repo));

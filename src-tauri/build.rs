@@ -30,6 +30,12 @@ fn main() {
                 .default_permission(DefaultPermissionRule::AllowAllCommands),
         )
         .plugin(
+            "github",
+            InlinedPlugin::new()
+                .commands(&["owners", "repo_list", "repo_view", "my_prs", "local_clones"])
+                .default_permission(DefaultPermissionRule::AllowAllCommands),
+        )
+        .plugin(
             "browser",
             InlinedPlugin::new()
                 .commands(&["open", "set_bounds", "navigate", "action", "close_all", "labels"])

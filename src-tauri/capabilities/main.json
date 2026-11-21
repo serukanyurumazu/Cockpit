@@ -16,6 +16,7 @@
     "notification:default",
     "core:window:allow-destroy",
     "project:default",
-    "brain:default"
+    "brain:default",
+    "github:default"
   ]
 }

@@ -1,9 +1,11 @@
 <script lang="ts">
   import { agents } from "./core/agents.svelte";
   import { adapters, type AgentId } from "./modules/agents/adapters";
+  import { cloneOf, loadRepos, repos, type Repo } from "./core/repos.svelte";
 
   let {
     active,
+    activeRepo,
     terminalOpen,
     open,
     addAgent,
@@ -11,8 +13,13 @@
     addBrain,
     focusPane,
     toggleTerminal,
+    openRepo,
+    chooseCloneRoot,
   }: {
     active: string;
+    activeRepo: string;
+    openRepo: (repo: string) => void;
+    chooseCloneRoot: () => void;
     terminalOpen: boolean;
     open: (component: string) => void;
     addAgent: (id: AgentId) => void;
@@ -21,6 +28,15 @@
     focusPane: (id: string) => void;
     toggleTerminal: () => void;
   } = $props();
+
+  let expanded = $state<Record<string, boolean>>(JSON.parse(localStorage.getItem("reposExpanded") ?? "{}"));
+  let q = $state("");
+  function toggle(owner: string) {
+    expanded[owner] = !expanded[owner];
+    localStorage.setItem("reposExpanded", JSON.stringify(expanded));
+  }
+  const match = (r: Repo) => !q || r.name.toLowerCase().includes(q.toLowerCase());
+  const folderName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop();
 
   const stateLabel: Record<string, string> = { unknown: "?", working: "çalışıyor", idle: "boşta", needs_input: "onay bekliyor", exited: "bitti" };
 </script>
@@ -31,7 +47,25 @@
   <button class="item" class:on={active === "dashboard"} onclick={() => open("dashboard")}>Dashboard</button>
 
   <section>
-    <h3>Repos</h3>
+    <h3>Repos <button class="icon" title="Yenile" onclick={loadRepos} disabled={repos.loading}>⟳</button></h3>
+    {#if repos.loading && !repos.owners.length}<div class="note">Yükleniyor…</div>{/if}
+    {#if repos.error}<div class="note err" title={repos.error}>{repos.error}</div>{/if}
+    {#if repos.owners.length}
+      <input class="filter" placeholder="Repo ara" bind:value={q} />
+    {/if}
+    {#each repos.owners as o (o.owner)}
+      <button class="sub owner" onclick={() => toggle(o.owner)}>
+        <span class="caret">{expanded[o.owner] || q ? "▾" : "▸"}</span>{o.owner}<small>{o.repos.length}</small>
+      </button>
+      {#if expanded[o.owner] || q}
+        {#each o.repos.filter(match) as r (r.nameWithOwner)}
+          <button class="sub leaf" class:on={activeRepo === r.nameWithOwner} class:dim={r.isArchived} title={r.description || r.nameWithOwner} onclick={() => openRepo(r.nameWithOwner)}>
+            <i class:local={!!cloneOf(r.nameWithOwner)} title={cloneOf(r.nameWithOwner) ? "yerel klon var" : ""}></i>{r.name}{#if r.isPrivate}<small>özel</small>{/if}
+          </button>
+        {/each}
+      {/if}
+    {/each}
+    <button class="sub" onclick={chooseCloneRoot} title={repos.root}>Klon klasörü: {repos.root ? folderName(repos.root) : "seç"}</button>
     <button class="sub" onclick={addProject}>+ Yerel klasör aç</button>
   </section>
 
@@ -77,5 +111,19 @@
   .chip.idle i { background: #22c55e; }
   .chip.needs_input i { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
   .chip.exited i { background: #374151; }
+  h3 { display: flex; align-items: center; }
+  .icon { margin-left: auto; padding: 0 4px; font-size: 13px; color: #8a90a0; }
+  .note { padding: 2px 8px 2px 16px; color: #8a90a0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .note.err { color: #f87171; }
+  .filter { margin: 2px 8px 4px 16px; width: calc(100% - 24px); box-sizing: border-box; background: #252830; color: inherit; border: 1px solid #353944; border-radius: 4px; padding: 2px 6px; font: inherit; }
+  .owner { font-weight: 600; }
+  .owner small { margin-left: auto; color: #8a90a0; font-weight: normal; }
+  .caret { width: 10px; color: #8a90a0; }
+  .leaf { padding-left: 28px; overflow: hidden; white-space: nowrap; }
+  .leaf.on { background: #2b3040; }
+  .leaf.dim { opacity: .5; }
+  .leaf i { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .leaf i.local { background: #22c55e; }
+  .leaf small { margin-left: auto; color: #8a90a0; font-size: 11px; }
   .toggle { margin-top: auto; border: 1px solid #353944; padding: 4px 8px; }
 </style>

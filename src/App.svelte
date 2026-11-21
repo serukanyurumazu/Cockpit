@@ -10,6 +10,7 @@
   import Sidebar from "./Sidebar.svelte";
   import { startUnityTimeline } from "./core/unityTimeline.svelte";
   import { startRoutines } from "./core/routines.svelte";
+  import { loadRepos, setCloneRoot } from "./core/repos.svelte";
   import { adapters, type AgentId } from "./modules/agents/adapters";
   import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -22,6 +23,7 @@
   let termApi: DockviewApi | null = null;
   let settings: Settings;
   let active = $state("");
+  let activeRepo = $state("");
   let terminalOpen = $state(localStorage.getItem("terminalOpen") !== "0");
   let termWidth = $state(Number(localStorage.getItem("termWidth")) || 520);
   const TERMINAL = new Set(["terminal"]);
@@ -50,8 +52,9 @@
       params,
       position: below
         ? { referencePanel: below, direction: "below" }
-        : dock.activeGroup
-          ? { referenceGroup: dock.activeGroup }
+        : // center: sidebar picks go to the main (first) group, not into a panel opened below it
+          (dock === api ? dock.groups[0] : dock.activeGroup)
+          ? { referenceGroup: dock === api ? dock.groups[0] : dock.activeGroup! }
           : undefined,
     });
   }
@@ -126,6 +129,23 @@
     terminalOpen = on;
     localStorage.setItem("terminalOpen", on ? "1" : "0");
   }
+  function openRepo(repo: string) {
+    const existing = api?.panels.find((p) => p.params?.repo === repo);
+    if (existing) existing.api.setActive();
+    else addPanel("repo", { repo });
+  }
+
+  async function chooseCloneRoot() {
+    const dir = await pickFolder("Klon klasörü (repoların yerel kopyaları burada)");
+    if (dir) await setCloneRoot(dir);
+  }
+
+  // Modules open panels by kind here so terminals land in the right dock (e.g. a clone from a Repo pane).
+  const onOpenPanel = (e: Event) => {
+    const { component, params } = (e as CustomEvent).detail;
+    addPanel(component, params);
+  };
+
   function setTerminalOpen(on: boolean) {
     showTerminal(on);
     if (on && termApi && termApi.panels.length === 0) addPanel("terminal");
@@ -245,7 +265,13 @@
         p.api.close();
         termApi.addPanel({ id, component: "terminal", title, params });
       }
-      offs.push(api.onDidActivePanelChange((e) => (active = e.panel?.id.split("-")[0] ?? "")));
+      offs.push(
+        api.onDidActivePanelChange((e) => {
+          active = e.panel?.id.split("-")[0] ?? "";
+          activeRepo = (e.panel?.params?.repo as string | undefined) ?? "";
+        }),
+      );
+      loadRepos();
       if (api.panels.length === 0) open("dashboard");
       if (terminalOpen && termApi.panels.length === 0) addPanel("terminal");
       startRoutines((r) => addPanel("terminal", { agent: r.agent, cwd: r.cwd, prompt: r.prompt })).catch(() => {});
@@ -263,7 +289,9 @@
     window.addEventListener("dragend", endDrag, true);
     window.addEventListener("drop", endDrag, true);
     window.addEventListener("keydown", onKey, true);
+    window.addEventListener("cockpit:open-panel", onOpenPanel);
     return () => {
+      window.removeEventListener("cockpit:open-panel", onOpenPanel);
       disposed = true;
       offClose.then((un) => un());
       offs.forEach((o) => o.dispose());
@@ -278,7 +306,7 @@
 </script>
 
 <div class="shell">
-  <Sidebar {active} {terminalOpen} {open} {addAgent} {addProject} {addBrain} {focusPane} toggleTerminal={() => setTerminalOpen(!terminalOpen)} />
+  <Sidebar {active} {activeRepo} {openRepo} {chooseCloneRoot} {terminalOpen} {open} {addAgent} {addProject} {addBrain} {focusPane} toggleTerminal={() => setTerminalOpen(!terminalOpen)} />
   <div class="dock" bind:this={host}></div>
   <div class="split" class:hidden={!terminalOpen} onpointerdown={startResize} role="separator" aria-orientation="vertical"></div>
   <div class="dock right" class:hidden={!terminalOpen} style:width="{termWidth}px" bind:this={termHost}></div>

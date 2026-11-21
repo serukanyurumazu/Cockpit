@@ -5,6 +5,25 @@
   import { timeline } from "../../core/unityTimeline.svelte";
   import { adapters } from "../agents/adapters";
   import { dayKey } from "../routines/schedule";
+  import { invoke } from "@tauri-apps/api/core";
+  import { openUrl } from "@tauri-apps/plugin-opener";
+
+  interface Pr { repository: { nameWithOwner: string }; title: string; number: number; url: string; isDraft: boolean }
+  let prs = $state<Pr[] | null>(null);
+  let prError = $state("");
+  async function loadPrs() {
+    try {
+      prs = await invoke<Pr[]>("plugin:github|my_prs");
+      prError = "";
+    } catch (e) {
+      prError = String(e);
+    }
+  }
+  $effect(() => {
+    loadPrs();
+    const t = setInterval(loadPrs, 5 * 60_000);
+    return () => clearInterval(t);
+  });
 
   // svelte-ignore state_referenced_locally
   let { ctx: _ctx }: { ctx: ModuleCtx } = $props(); // module contract; reads shared stores only
@@ -54,8 +73,18 @@
   </section>
 
   <section>
-    <h3>Açık PR'lar</h3>
-    <p class="empty">GitHub CLI (gh) kurulup giriş yapılınca burada görünecek.</p>
+    <h3>Açık PR'lar (seninle ilgili)</h3>
+    {#if prError}
+      <p class="empty">{prError}</p>
+    {:else if !prs}
+      <p class="empty">Yükleniyor…</p>
+    {:else}
+      {#each prs as p (p.url)}
+        <button class="row link" onclick={() => openUrl(p.url)}><b>#{p.number}</b> {p.title}<small>{p.repository.nameWithOwner}{p.isDraft ? " · taslak" : ""}</small></button>
+      {:else}
+        <p class="empty">Açık PR yok.</p>
+      {/each}
+    {/if}
   </section>
 </div>
 
@@ -72,5 +101,7 @@
   .needs_input i { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
   .fail i { background: #ef4444; }
   .exited i, .pending i { background: #374151; }
+  .link { width: 100%; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .link:hover { color: #93c5fd; }
   .empty { color: #8a90a0; margin: 0; }
 </style>
