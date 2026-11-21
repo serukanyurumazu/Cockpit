@@ -113,7 +113,6 @@
   }
 
   const notes: Record<string, string> = {
-    dashboard: "Özet kartları: ajan durumları, bugünkü rutinler, Unity son olaylar, açık PR'lar.",
     cicd: "İçeriği sonra tanımlanacak.",
   };
   /** Sidebar sections are one panel each: focus it if open, else add it to the center. */
