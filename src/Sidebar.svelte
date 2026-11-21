@@ -1,7 +1,7 @@
 <script lang="ts">
   import { agents } from "./core/agents.svelte";
   import { adapters, type AgentId } from "./modules/agents/adapters";
-  import { cloneOf, loadRepos, repos, type Repo } from "./core/repos.svelte";
+  import { cloneOf, groupByArea, loadRepos, repos, type Repo } from "./core/repos.svelte";
 
   let {
     active,
@@ -41,6 +41,12 @@
   const stateLabel: Record<string, string> = { unknown: "?", working: "çalışıyor", idle: "boşta", needs_input: "onay bekliyor", exited: "bitti" };
 </script>
 
+{#snippet leaf(r: Repo, indent: number)}
+  <button class="sub leaf" style:padding-left="{indent}px" class:on={activeRepo === r.nameWithOwner} class:dim={r.isArchived} title={r.description || r.nameWithOwner} onclick={() => openRepo(r.nameWithOwner)}>
+    <i class:local={!!cloneOf(r.nameWithOwner)} title={cloneOf(r.nameWithOwner) ? "yerel klon var" : ""}></i>{r.name}{#if r.isPrivate}<small>özel</small>{/if}
+  </button>
+{/snippet}
+
 <nav>
   <div class="brand">AI Dev Cockpit</div>
 
@@ -53,16 +59,29 @@
     {#if repos.owners.length}
       <input class="filter" placeholder="Repo ara" bind:value={q} />
     {/if}
-    {#each repos.owners as o (o.owner)}
+    {#each repos.owners as o, i (o.owner)}
+      {@const shown = (i === 0 ? o.repos.filter((r) => cloneOf(r.nameWithOwner)) : o.repos).filter(match)}
       <button class="sub owner" onclick={() => toggle(o.owner)}>
-        <span class="caret">{expanded[o.owner] || q ? "▾" : "▸"}</span>{o.owner}<small>{o.repos.length}</small>
+        <span class="caret">{expanded[o.owner] || q ? "▾" : "▸"}</span>{o.owner}<small>{shown.length}</small>
       </button>
       {#if expanded[o.owner] || q}
-        {#each o.repos.filter(match) as r (r.nameWithOwner)}
-          <button class="sub leaf" class:on={activeRepo === r.nameWithOwner} class:dim={r.isArchived} title={r.description || r.nameWithOwner} onclick={() => openRepo(r.nameWithOwner)}>
-            <i class:local={!!cloneOf(r.nameWithOwner)} title={cloneOf(r.nameWithOwner) ? "yerel klon var" : ""}></i>{r.name}{#if r.isPrivate}<small>özel</small>{/if}
-          </button>
-        {/each}
+        {#if i === 0}
+          <!-- personal account: only repos cloned under the clone folder -->
+          {#each shown as r (r.nameWithOwner)}
+            {@render leaf(r, 28)}
+          {:else}
+            <div class="note">{repos.root ? "Klon klasöründe kişisel repo yok." : "Klon klasörü seçilmedi."}</div>
+          {/each}
+        {:else}
+          {#each groupByArea(shown) as [area, list] (area)}
+            <button class="sub area" onclick={() => toggle(o.owner + "/" + area)}>
+              <span class="caret">{expanded[o.owner + "/" + area] || q ? "▾" : "▸"}</span>{area}<small>{list.length}</small>
+            </button>
+            {#if expanded[o.owner + "/" + area] || q}
+              {#each list as r (r.nameWithOwner)}{@render leaf(r, 40)}{/each}
+            {/if}
+          {/each}
+        {/if}
       {/if}
     {/each}
     <button class="sub" onclick={chooseCloneRoot} title={repos.root}>Klon klasörü: {repos.root ? folderName(repos.root) : "seç"}</button>
@@ -117,6 +136,8 @@
   .note.err { color: #f87171; }
   .filter { margin: 2px 8px 4px 16px; width: calc(100% - 24px); box-sizing: border-box; background: #252830; color: inherit; border: 1px solid #353944; border-radius: 4px; padding: 2px 6px; font: inherit; }
   .owner { font-weight: 600; }
+  .area { padding-left: 28px; color: #b8bcc8; }
+  .area small { margin-left: auto; color: #8a90a0; }
   .owner small { margin-left: auto; color: #8a90a0; font-weight: normal; }
   .caret { width: 10px; color: #8a90a0; }
   .leaf { padding-left: 28px; overflow: hidden; white-space: nowrap; }

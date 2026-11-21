@@ -55,7 +55,7 @@ async fn owners() -> Result<Vec<String>, String> {
 #[tauri::command]
 async fn repo_list(owner: String) -> Result<Value, String> {
     check(&owner)?;
-    gh(&["repo", "list", &owner, "--limit", "300", "--json", "name,nameWithOwner,isPrivate,isArchived,isFork,description,updatedAt,url"])
+    gh(&["repo", "list", &owner, "--limit", "300", "--json", "name,nameWithOwner,isPrivate,isArchived,isFork,description,updatedAt,url,repositoryTopics"])
 }
 
 /// Repo summary, open PRs and issues, last commits; fetched in parallel.

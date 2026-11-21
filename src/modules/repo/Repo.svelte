@@ -3,7 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import type { ModuleCtx } from "../../core/module";
-  import { cloneOf, loadClones, repos } from "../../core/repos.svelte";
+  import { areaOf, cloneOf, loadClones, repos, setArea } from "../../core/repos.svelte";
   import { shellLine } from "../agents/adapters";
 
   let { ctx }: { ctx: ModuleCtx } = $props();
@@ -11,6 +11,11 @@
   const repo = ctx.state.repo as string;
   const path = $derived(cloneOf(repo));
   const isWindows = navigator.userAgent.includes("Windows");
+  const isOrg = $derived(repos.owners.findIndex((o) => o.owner === repo.split("/")[0]) > 0);
+  const meta = $derived(repos.owners.flatMap((o) => o.repos).find((r) => r.nameWithOwner === repo));
+  const knownAreas = $derived([...new Set(repos.owners.slice(1).flatMap((o) => o.repos.map(areaOf)))]);
+  // svelte-ignore state_referenced_locally
+  let area = $state(repos.areas[repo] ?? "");
 
   interface View {
     info: { description: string; url: string; defaultBranchRef: { name: string } | null; pushedAt: string; isPrivate: boolean };
@@ -72,6 +77,14 @@
     {#if view}<button onclick={() => open(view!.info.url)}>GitHub'da aç</button>{/if}
   </header>
   {#if view?.info.description}<p>{view.info.description}</p>{/if}
+  {#if isOrg}
+    <form class="area" onsubmit={(e) => (e.preventDefault(), setArea(repo, area))}>
+      <span class="meta">Alan:</span>
+      <input list="areas" placeholder={meta?.repositoryTopics?.[0]?.name ?? "Diğer"} bind:value={area} onchange={() => setArea(repo, area)} />
+      <datalist id="areas">{#each knownAreas as a (a)}<option value={a}></option>{/each}</datalist>
+      <span class="meta">Boş bırakılırsa GitHub topic'ine göre gruplanır.</span>
+    </form>
+  {/if}
 
   <div class="local">
     {#if path}
@@ -123,6 +136,8 @@
   .meta { color: #8a90a0; }
   .err { color: #f87171; }
   button { background: #252830; color: inherit; border: 1px solid #353944; border-radius: 4px; padding: 3px 8px; font: inherit; cursor: pointer; }
+  .area { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+  .area input { background: #252830; color: inherit; border: 1px solid #353944; border-radius: 4px; padding: 3px 8px; font: inherit; }
   .local { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0 14px; }
   .cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
   section { border: 1px solid #2a2d35; border-radius: 6px; padding: 10px 12px; background: #1a1c22; }
