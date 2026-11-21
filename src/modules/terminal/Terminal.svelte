@@ -7,24 +7,25 @@
   import { Channel, invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { openUrl } from "@tauri-apps/plugin-opener";
+  import type { ModuleCtx } from "../../core/module";
 
-  let {
-    cwd = null,
-    program = null,
-  }: { cwd?: string | null; program?: string[] | null } = $props();
+  let { ctx }: { ctx: ModuleCtx } = $props();
 
   let el: HTMLDivElement;
   const ACK_EVERY = 64 * 1024;
 
   onMount(() => {
     const id = crypto.randomUUID();
+    const { terminal: opts } = ctx.settings;
+    const cwd = (ctx.state.cwd as string | undefined) ?? null;
+    const program = (ctx.state.program as string[] | undefined) ?? (opts.shell ? [opts.shell] : null);
     const pty = (cmd: string, args: Record<string, unknown>) =>
       invoke(`plugin:pty|${cmd}`, { id, ...args }).catch(() => {});
 
     const term = new Terminal({
       fontFamily: '"Cascadia Mono", Menlo, Consolas, monospace',
-      fontSize: 13,
-      scrollback: 5000,
+      fontSize: opts.fontSize,
+      scrollback: opts.scrollback,
       macOptionIsMeta: false, // Turkish Mac layout types @ with Option
       theme: { background: "#16181d" },
       // OSC 8 links: only http(s), opened in the system browser
@@ -37,18 +38,32 @@
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(el);
+    // WebGL contexts are capped (~16 per page): only visible panes hold one; DOM renderer otherwise.
     let webgl: WebglAddon | null = null;
-    try {
-      webgl = new WebglAddon();
-      webgl.onContextLoss(() => {
+    const enableWebgl = () => {
+      if (webgl) return;
+      try {
+        webgl = new WebglAddon();
+        webgl.onContextLoss(() => {
+          webgl?.dispose();
+          webgl = null;
+        });
+        term.loadAddon(webgl);
+      } catch {
+        webgl = null;
+      }
+    };
+    enableWebgl();
+    fit.fit();
+    const offVisibility = ctx.onVisibility((visible) => {
+      if (visible) {
+        enableWebgl();
+        fit.fit();
+      } else {
         webgl?.dispose();
         webgl = null;
-      });
-      term.loadAddon(webgl);
-    } catch {
-      webgl = null; // DOM renderer fallback
-    }
-    fit.fit();
+      }
+    });
 
     // Input is wired before spawn so ConPTY's ESC[6n query is answered immediately.
     term.onData((data) => pty("write", { data }));
@@ -110,6 +125,7 @@
 
     return () => {
       ro.disconnect();
+      offVisibility();
       el.removeEventListener("paste", onPaste, true);
       exited.then((un) => un());
       pty("kill", {});

@@ -1,46 +1,152 @@
 <script lang="ts">
-  import Terminal from "./modules/terminal/Terminal.svelte";
-  import Browser from "./modules/browser/Browser.svelte";
+  import { onMount } from "svelte";
+  import { createDockview, themeAbyss, type DockviewApi } from "dockview-core";
+  import "./modules";
+  import { registry, type ModuleCtx } from "./core/module";
+  import { loadSettings, type Settings } from "./core/settings";
+  import { loadLayout, saveLayout } from "./core/layout";
 
-  let terminals = $state<string[]>([crypto.randomUUID()]);
-  let showBrowser = $state(false);
-  const addTerminal = () => (terminals = [...terminals, crypto.randomUUID()]);
-  const close = (key: string) => (terminals = terminals.filter((k) => k !== key));
+  let host: HTMLDivElement;
+  let api: DockviewApi | null = null;
+  let settings: Settings;
+
+  const isMac = navigator.userAgent.includes("Mac");
+  let saveTimer = 0;
+  const scheduleSave = () => {
+    clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => api && saveLayout(api.toJSON()), 400);
+  };
+  // Native browser webviews paint above HTML, so they hide while a drag or modal covers them.
+  const cover = (on: boolean) => window.dispatchEvent(new CustomEvent("cockpit:cover", { detail: on }));
+
+  function addPanel(component: string, params: Record<string, unknown> = {}) {
+    if (!api) return;
+    const mod = registry.get(component);
+    api.addPanel({
+      id: `${component}-${crypto.randomUUID().slice(0, 8)}`,
+      component,
+      title: mod?.title ?? component,
+      params,
+      position: api.activeGroup ? { referenceGroup: api.activeGroup } : undefined,
+    });
+  }
+
+  function cyclePanel(step: number) {
+    const group = api?.activeGroup;
+    const active = api?.activePanel;
+    if (!group || !active || group.panels.length < 2) return;
+    const i = group.panels.indexOf(active);
+    group.panels[(i + step + group.panels.length) % group.panels.length].api.setActive();
+  }
+
+  // App shortcuts use Ctrl+Shift (Cmd on macOS) so plain Ctrl+W/T stay with the terminal.
+  function onKey(e: KeyboardEvent) {
+    const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && e.shiftKey;
+    const k = e.key.toLowerCase();
+    let handled = true;
+    if (e.ctrlKey && k === "tab") cyclePanel(e.shiftKey ? -1 : 1);
+    else if (mod && k === "t") addPanel("terminal");
+    else if (mod && k === "b") addPanel("browser");
+    else if (mod && k === "w") api?.activePanel?.api.close();
+    else handled = false;
+    if (handled) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }
+
+  function addDefault() {
+    addPanel("terminal");
+  }
+
+  onMount(() => {
+    let disposed = false;
+    const offs: { dispose(): void }[] = [];
+    (async () => {
+      settings = await loadSettings();
+      const saved = await loadLayout();
+      if (disposed) return;
+      api = createDockview(host, {
+        theme: themeAbyss,
+        createComponent: ({ name }) => {
+          const element = document.createElement("div");
+          element.style.height = "100%";
+          let view: { dispose(): void } | undefined;
+          return {
+            element,
+            init: ({ api: panel, containerApi, params }) => {
+              const mod = registry.get(name);
+              if (!mod) {
+                element.textContent = `Bilinmeyen modül: ${name}`;
+                return;
+              }
+              const state = { ...(params ?? {}) } as Record<string, unknown>;
+              const ctx: ModuleCtx = {
+                paneId: panel.id,
+                settings,
+                state,
+                saveState(patch) {
+                  Object.assign(state, patch);
+                  panel.updateParameters({ ...state });
+                  scheduleSave();
+                },
+                setTitle: (t) => panel.setTitle(t),
+                onVisibility(cb) {
+                  const d = panel.onDidVisibilityChange((e) => cb(e.isVisible));
+                  return () => d.dispose();
+                },
+                onLayout(cb) {
+                  const d = containerApi.onDidLayoutChange(cb);
+                  return () => d.dispose();
+                },
+              };
+              view = mod.createView(element, ctx);
+            },
+            dispose: () => view?.dispose(),
+          };
+        },
+      });
+      try {
+        if (saved) api.fromJSON(saved);
+      } catch {
+        api.clear(); // corrupt or incompatible layout: fall back to default
+      }
+      if (api.panels.length === 0) addDefault();
+      offs.push(
+        api.onDidLayoutChange(scheduleSave),
+        api.onWillDragPanel(() => cover(true)),
+        api.onWillDragGroup(() => cover(true)),
+      );
+    })();
+    const endDrag = () => cover(false);
+    window.addEventListener("dragend", endDrag, true);
+    window.addEventListener("drop", endDrag, true);
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      disposed = true;
+      offs.forEach((o) => o.dispose());
+      window.removeEventListener("dragend", endDrag, true);
+      window.removeEventListener("drop", endDrag, true);
+      window.removeEventListener("keydown", onKey, true);
+      api?.dispose();
+    };
+  });
+
+  const shortcut = isMac ? "⌘" : "Ctrl+Shift+";
 </script>
 
 <div class="shell">
   <header>
     <strong>AI Dev Cockpit</strong>
-    <button onclick={addTerminal}>+ Terminal</button>
-    <button onclick={() => (showBrowser = !showBrowser)}>{showBrowser ? "Tarayıcıyı kapat" : "+ Tarayıcı"}</button>
+    <button title="{shortcut}T" onclick={() => addPanel("terminal")}>+ Terminal</button>
+    <button title="{shortcut}B" onclick={() => addPanel("browser")}>+ Tarayıcı</button>
   </header>
-  <div class="main">
-    <section class="grid">
-      {#each terminals as key (key)}
-        <div class="pane">
-          <div class="bar">
-            <span>terminal</span>
-            <button title="Kapat" onclick={() => close(key)}>×</button>
-          </div>
-          <div class="body"><Terminal /></div>
-        </div>
-      {/each}
-    </section>
-    {#if showBrowser}
-      <section class="pane side"><Browser /></section>
-    {/if}
-  </div>
+  <div class="dock" bind:this={host}></div>
 </div>
 
 <style>
   .shell { display: flex; flex-direction: column; height: 100%; }
   header { display: flex; gap: 12px; align-items: center; padding: 6px 10px; border-bottom: 1px solid #2a2d35; }
   button { background: #252830; color: inherit; border: 1px solid #353944; border-radius: 4px; padding: 2px 10px; cursor: pointer; }
-  .main { flex: 1; display: flex; min-height: 0; gap: 4px; padding: 4px; }
-  .grid { flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); grid-auto-rows: 1fr; gap: 4px; min-height: 0; min-width: 0; }
-  .side { flex: 1; min-width: 0; }
-  .pane { display: flex; flex-direction: column; border: 1px solid #2a2d35; border-radius: 4px; min-height: 0; }
-  .bar { display: flex; justify-content: space-between; align-items: center; padding: 2px 6px; font-size: 11px; color: #8a90a0; border-bottom: 1px solid #2a2d35; }
-  .bar button { padding: 0 6px; }
-  .body { flex: 1; min-height: 0; }
+  .dock { flex: 1; min-height: 0; }
 </style>

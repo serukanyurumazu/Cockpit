@@ -2,8 +2,11 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
+  import type { ModuleCtx } from "../../core/module";
 
-  let { url: startUrl = "https://tauri.app" }: { url?: string } = $props();
+  let { ctx }: { ctx: ModuleCtx } = $props();
+  // svelte-ignore state_referenced_locally
+  const startUrl = (ctx.state.url as string | undefined) ?? ctx.settings.browser.home;
 
   const label = `browser-${crypto.randomUUID().slice(0, 8)}`;
   let host: HTMLDivElement;
@@ -39,14 +42,37 @@
     const ro = new ResizeObserver(sync);
     ro.observe(host);
     window.addEventListener("resize", sync);
+    const offLayout = ctx.onLayout(sync);
+    // The native view paints above all HTML: hide it while its tab is hidden or a drag/modal is active.
+    let visible = true;
+    let covered = false;
+    const applyShown = () => opened && act(visible && !covered ? "show" : "hide").then(sync);
+    const offVisibility = ctx.onVisibility((v) => {
+      visible = v;
+      applyShown();
+    });
+    const onCover = (e: Event) => {
+      covered = (e as CustomEvent<boolean>).detail;
+      applyShown();
+    };
+    window.addEventListener("cockpit:cover", onCover);
     const page = listen<{ label: string; url: string; loading: boolean }>("browser:page", (e) => {
       if (e.payload.label !== label) return;
       address = e.payload.url;
       loading = e.payload.loading;
+      if (!loading) {
+        ctx.saveState({ url: e.payload.url });
+        try {
+          ctx.setTitle(new URL(e.payload.url).hostname);
+        } catch {}
+      }
     });
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", sync);
+      window.removeEventListener("cockpit:cover", onCover);
+      offLayout();
+      offVisibility();
       page.then((un) => un());
       act("close");
     };
