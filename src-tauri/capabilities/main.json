@@ -11,6 +11,9 @@
     "pty:default",
     "browser:default",
     "store:default",
-    "hooks:default"
+    "hooks:default",
+    "dialog:default",
+    "notification:default",
+    "core:window:allow-destroy"
   ]
 }

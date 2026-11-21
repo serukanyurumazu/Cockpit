@@ -8,17 +8,25 @@
   import { listen } from "@tauri-apps/api/event";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import type { ModuleCtx } from "../../core/module";
+  import { adapters, shellLine, type AgentId, type HookSignal } from "../agents/adapters";
+  import { setAgentState, trackAgent, untrackAgent } from "../../core/agents.svelte";
 
   let { ctx }: { ctx: ModuleCtx } = $props();
 
   let el: HTMLDivElement;
   const ACK_EVERY = 64 * 1024;
+  const isWindows = navigator.userAgent.includes("Windows");
+  // svelte-ignore state_referenced_locally
+  const adapter = adapters[ctx.state.agent as AgentId] ?? null;
+  // A restored agent pane offers resume instead of silently starting a new session.
+  // svelte-ignore state_referenced_locally
+  let choosing = $state(!!(adapter && ctx.state.launched && ctx.state.sessionId));
+  let start: (resume: boolean) => void = () => {};
 
   onMount(() => {
     const id = crypto.randomUUID();
     const { terminal: opts } = ctx.settings;
     const cwd = (ctx.state.cwd as string | undefined) ?? null;
-    const program = (ctx.state.program as string[] | undefined) ?? (opts.shell ? [opts.shell] : null);
     const pty = (cmd: string, args: Record<string, unknown>) =>
       invoke(`plugin:pty|${cmd}`, { id, ...args }).catch(() => {});
 
@@ -68,6 +76,7 @@
 
     // Input is wired before spawn so ConPTY's ESC[6n query is answered immediately.
     term.onData((data) => pty("write", { data }));
+    term.onResize(({ cols, rows }) => pty("resize", { cols, rows }));
 
     // On Windows/Linux xterm turns Ctrl+V into ^V and swallows the paste event; let the browser
     // paste instead (text via xterm's paste handler, images via onPaste below).
@@ -85,11 +94,10 @@
       }
       return true;
     });
-    term.onResize(({ cols, rows }) => pty("resize", { cols, rows }));
 
     // Image-only clipboard: send the CLI's own image-paste key so it reads the clipboard itself.
     // Claude Code binds this to Alt+V on Windows and Ctrl+V elsewhere.
-    const imagePasteKey = navigator.userAgent.includes("Windows") ? "\x1bv" : "\x16";
+    const imagePasteKey = isWindows ? "\x1bv" : "\x16";
     const onPaste = (e: ClipboardEvent) => {
       if (!e.clipboardData?.getData("text/plain")) {
         e.preventDefault();
@@ -113,12 +121,48 @@
     };
 
     const exited = listen<{ id: string; code: number | null }>("pty:exit", (e) => {
-      if (e.payload.id === id) term.write(`\r\n\x1b[2m[süreç bitti: ${e.payload.code ?? "?"}]\x1b[0m\r\n`);
+      if (e.payload.id !== id) return;
+      term.write(`\r\n\x1b[2m[süreç bitti: ${e.payload.code ?? "?"}]\x1b[0m\r\n`);
+      if (adapter) setAgentState(ctx.paneId, "exited");
     });
 
-    invoke("plugin:pty|spawn", { id, cols: term.cols, rows: term.rows, cwd, program, onData }).catch(
-      (err) => term.write(`\x1b[31mPTY başlatılamadı: ${err}\x1b[0m\r\n`),
-    );
+    let hookToken: string | null = null;
+    const hooked = adapter
+      ? listen<HookSignal & { paneId: string }>("agent:hook", (e) => {
+          if (e.payload.paneId !== ctx.paneId) return;
+          if (e.payload.sessionId && !ctx.state.sessionId) ctx.saveState({ sessionId: e.payload.sessionId });
+          const s = adapter.onHook(e.payload);
+          if (s) setAgentState(ctx.paneId, s);
+        })
+      : null;
+
+    const fail = (err: unknown) => term.write(`\x1b[31mBaşlatılamadı: ${err}\x1b[0m\r\n`);
+    start = (resume: boolean) => {
+      choosing = false;
+      (async () => {
+        let env: Record<string, string> | undefined;
+        let shell_line: string | undefined;
+        const program = !adapter && opts.shell ? [opts.shell] : null;
+        if (adapter) {
+          const folder = cwd?.split(/[\\/]/).filter(Boolean).pop();
+          ctx.setTitle(folder ? `${adapter.title} · ${folder}` : adapter.title);
+          trackAgent({ paneId: ctx.paneId, agent: adapter.id, title: adapter.title });
+          const reg = await invoke<{ port: number; token: string }>("plugin:hooks|register", { paneId: ctx.paneId });
+          hookToken = reg.token;
+          const paths: Record<string, string> = {};
+          for (const [name, contents] of Object.entries(adapter.configs())) {
+            paths[name] = await invoke<string>("plugin:hooks|write_config", { token: reg.token, name, contents });
+          }
+          const sessionId = ctx.state.sessionId as string | undefined;
+          const plan = adapter.launch({ paths, sessionId, resume });
+          ctx.saveState({ launched: true, ...(plan.sessionId ? { sessionId: plan.sessionId } : {}) });
+          env = { ...plan.env, COCKPIT_HOOK_PORT: String(reg.port), COCKPIT_HOOK_TOKEN: reg.token };
+          shell_line = shellLine(adapter.bin, plan.args, isWindows);
+        }
+        await invoke("plugin:pty|spawn", { id, cols: term.cols, rows: term.rows, cwd, program, env, shellLine: shell_line, onData });
+      })().catch(fail);
+    };
+    if (!choosing) start(false);
 
     const ro = new ResizeObserver(() => fit.fit());
     ro.observe(el);
@@ -129,6 +173,9 @@
       offVisibility();
       el.removeEventListener("paste", onPaste, true);
       exited.then((un) => un());
+      hooked?.then((un) => un());
+      if (hookToken) invoke("plugin:hooks|unregister", { token: hookToken }).catch(() => {});
+      if (adapter) untrackAgent(ctx.paneId);
       pty("kill", {});
       if (import.meta.env.DEV) delete (window as any).__cockpitTerms?.[ctx.paneId];
       term.dispose();
@@ -136,13 +183,20 @@
   });
 </script>
 
-<div class="term" bind:this={el}></div>
+<div class="wrap">
+  <div class="term" bind:this={el}></div>
+  {#if choosing && adapter}
+    <div class="resume">
+      <span>Önceki {adapter.title} oturumu</span>
+      <button onclick={() => start(true)}>Sürdür</button>
+      <button onclick={() => start(false)}>Yeni oturum</button>
+    </div>
+  {/if}
+</div>
 
 <style>
-  .term {
-    width: 100%;
-    height: 100%;
-    padding: 4px;
-    box-sizing: border-box;
-  }
+  .wrap { position: relative; width: 100%; height: 100%; }
+  .term { width: 100%; height: 100%; padding: 4px; box-sizing: border-box; }
+  .resume { position: absolute; inset: 0; display: flex; gap: 8px; align-items: center; justify-content: center; background: rgba(22, 24, 29, 0.92); }
+  .resume button { background: #252830; color: inherit; border: 1px solid #353944; border-radius: 4px; padding: 4px 12px; cursor: pointer; }
 </style>
