@@ -28,3 +28,9 @@ Covers shell I/O, Ctrl+C, flood responsiveness, Ctrl+V text/image, selection cop
   - Codex 0.171.0: hooks fire (SessionStart arrives with first prompt), working → idle, session id captured. First launch asks folder trust + one-time hook review (hook command is constant, so review is once). needs_input not observed: default sandbox auto-approves workspace writes.
   - Gemini CLI dropped (no longer serves individual accounts). Replaced by Antigravity CLI `agy` 1.5.13: hooks via global `~/.gemini/config/hooks.json` entry `cockpit-status`; working → idle and conversation id verified. No permission event in agy, so no needs_input.
   - Dev-mode note: don't point Codex at this repo while `tauri dev` runs; its Windows sandbox touches file ACLs and the watcher restarts the app.
+- **M3 (Windows), 2026-11-21:** e2e passed.
+  - Project panel: git branch/changes with polling (`.git/index`/HEAD stamp + 15 s), new files detected.
+  - Unity log: real default `%LOCALAPPDATA%\Unity\Editor\Editor.log` read (Unity 6000.3/6000.6 installed); error/warning classification from real samples; truncation shows a "log yeniden başladı" separator.
+  - TASKS.md (`<project>/.cockpit/brain/`): add, toggle, external edits reload, stale write refused without losing the agent's lines.
+  - Browser isolation: page has no `__TAURI__`; `pty`/`hooks`/`project` commands rejected by ACL for the browser webview; `file:` navigation blocked.
+  - Not yet verified on macOS (`~/Library/Logs/Unity/Editor.log`).

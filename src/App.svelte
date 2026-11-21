@@ -36,16 +36,26 @@
     });
   }
 
-  async function addAgent(agent: AgentId) {
+  async function pickFolder(title: string): Promise<string | null> {
     cover(true); // native dialog must not sit under a browser webview
     try {
-      const dir = await open({ directory: true, title: `${adapters[agent].title}: proje klasörü`, defaultPath: localStorage.getItem("lastDir") ?? undefined });
-      if (typeof dir !== "string") return;
+      const dir = await open({ directory: true, title, defaultPath: localStorage.getItem("lastDir") ?? undefined });
+      if (typeof dir !== "string") return null;
       localStorage.setItem("lastDir", dir);
-      addPanel("terminal", { agent, cwd: dir });
+      return dir;
     } finally {
       cover(false);
     }
+  }
+
+  async function addAgent(agent: AgentId) {
+    const dir = await pickFolder(`${adapters[agent].title}: proje klasörü`);
+    if (dir) addPanel("terminal", { agent, cwd: dir });
+  }
+
+  async function addProject() {
+    const dir = await pickFolder("Proje klasörü");
+    if (dir) addPanel("project", { path: dir });
   }
 
   const focusPane = (id: string) => api?.getPanel(id)?.api.setActive();
@@ -170,6 +180,7 @@
     <strong>AI Dev Cockpit</strong>
     <button title="{shortcut}T" onclick={() => addPanel("terminal")}>+ Terminal</button>
     <button title="{shortcut}B" onclick={() => addPanel("browser")}>+ Tarayıcı</button>
+    <button onclick={addProject}>+ Proje</button>
     <span class="sep"></span>
     {#each Object.values(adapters) as a (a.id)}
       <button onclick={() => addAgent(a.id)}>+ {a.title}</button>
