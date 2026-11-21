@@ -26,6 +26,24 @@ pub const STRIPPED_ENV: &[&str] = &[
     "GOOGLE_API_KEY",
 ];
 
+/// Session markers of a parent Claude Code process. If Cockpit itself was started from a Claude
+/// terminal, children must not inherit them (they disable transcript saving / resume, and
+/// MESSAGING_TOKEN is that session's secret). User config vars (e.g. CLAUDE_CODE_GIT_BASH_PATH) stay.
+pub const PARENT_SESSION_ENV: &[&str] = &[
+    "CLAUDECODE",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_CODE_EXECPATH",
+    "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_CODE_SESSION_ATTENDED",
+    "CLAUDE_CODE_CHILD_SESSION",
+    "CLAUDE_CODE_CHILD_NOTES_DIR",
+    "CLAUDE_CODE_MESSAGING_SOCKET",
+    "CLAUDE_CODE_MESSAGING_TOKEN",
+    "CLAUDE_CODE_SSE_PORT",
+    "CLAUDE_PID",
+    "CLAUDE_EFFORT",
+];
+
 /// Unacked bytes above this pause the PTY reader until the frontend drains below LOW_WATER.
 const HIGH_WATER: usize = 1 << 20;
 const LOW_WATER: usize = 256 << 10;
@@ -167,7 +185,7 @@ async fn spawn<R: Runtime>(
             }
         }
     }
-    for k in STRIPPED_ENV {
+    for k in STRIPPED_ENV.iter().chain(PARENT_SESSION_ENV) {
         cmd.env_remove(k);
     }
     let env = env.unwrap_or_default();

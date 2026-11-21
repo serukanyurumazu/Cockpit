@@ -7,12 +7,15 @@ export interface Settings {
   version: number;
   terminal: { shell: string | null; fontSize: number; scrollback: number };
   browser: { home: string };
+  /** Extra CLI arguments per agent, e.g. { claude: { args: ["--model", "opus"] } } */
+  agents: Record<string, { args: string[] }>;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
   terminal: { shell: null, fontSize: 13, scrollback: 5000 },
   browser: { home: "https://github.com" },
+  agents: { claude: { args: [] }, codex: { args: [] }, gemini: { args: [] } },
 };
 
 /** Fills missing keys from defaults and upgrades old versions. Unknown/invalid input yields defaults. */
@@ -23,6 +26,7 @@ export function migrate(raw: unknown): Settings {
     version: SETTINGS_VERSION,
     terminal: { ...DEFAULT_SETTINGS.terminal, ...(r.terminal ?? {}) },
     browser: { ...DEFAULT_SETTINGS.browser, ...(r.browser ?? {}) },
+    agents: { ...DEFAULT_SETTINGS.agents, ...(r.agents ?? {}) },
   };
 }
 

@@ -9,7 +9,7 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import type { ModuleCtx } from "../../core/module";
   import { adapters, shellLine, type AgentId, type HookSignal } from "../agents/adapters";
-  import { setAgentState, trackAgent, untrackAgent } from "../../core/agents.svelte";
+  import { agents, setAgentState, trackAgent, untrackAgent } from "../../core/agents.svelte";
 
   let { ctx }: { ctx: ModuleCtx } = $props();
 
@@ -75,7 +75,12 @@
     });
 
     // Input is wired before spawn so ConPTY's ESC[6n query is answered immediately.
-    term.onData((data) => pty("write", { data }));
+    term.onData((data) => {
+      pty("write", { data });
+      // The user answered a permission prompt. Deny/Esc sends no hook, so leave needs_input here;
+      // Claude's idle_prompt notification later corrects to idle if the turn ended.
+      if (adapter && !/^\x1b\[[IO]$/.test(data) && agents[ctx.paneId]?.state === "needs_input") setAgentState(ctx.paneId, "working");
+    });
     term.onResize(({ cols, rows }) => pty("resize", { cols, rows }));
 
     // On Windows/Linux xterm turns Ctrl+V into ^V and swallows the paste event; let the browser
@@ -157,7 +162,11 @@
           const plan = adapter.launch({ paths, sessionId, resume });
           ctx.saveState({ launched: true, ...(plan.sessionId ? { sessionId: plan.sessionId } : {}) });
           env = { ...plan.env, COCKPIT_HOOK_PORT: String(reg.port), COCKPIT_HOOK_TOKEN: reg.token };
-          shell_line = shellLine(adapter.bin, plan.args, isWindows);
+          const extra = [
+            ...(ctx.settings.agents[adapter.id]?.args ?? []),
+            ...((ctx.state.args as string[] | undefined) ?? []),
+          ];
+          shell_line = shellLine(adapter.bin, [...plan.args, ...extra], isWindows);
         }
         await invoke("plugin:pty|spawn", { id, cols: term.cols, rows: term.rows, cwd, program, env, shellLine: shell_line, onData });
       })().catch(fail);
