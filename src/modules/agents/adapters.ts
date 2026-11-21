@@ -32,6 +32,8 @@ export interface AgentAdapter {
   configs(): Record<string, string>;
   launch(o: LaunchOptions): Launch;
   onHook(s: HookSignal): AgentState | undefined;
+  /** args that start an interactive session with a first prompt (routines) */
+  promptArgs(prompt: string): string[];
   /** command that installs hooks a CLI only reads from a global file */
   globalHooks?: string;
 }
@@ -57,6 +59,7 @@ const claude: AgentAdapter = {
     const session = resume && sessionId ? ["--resume", sessionId] : ["--session-id", id];
     return { args: ["--settings", paths["claude-settings.json"], ...session], env: {}, sessionId: id };
   },
+  promptArgs: (p) => [p],
   onHook({ event, notificationType }) {
     switch (event) {
       case "UserPromptSubmit":
@@ -88,6 +91,7 @@ const codex: AgentAdapter = {
     const hooks = CODEX_EVENTS.flatMap((e) => ["-c", `hooks.${e}=[{hooks=[{type='command',command='${hookCommand("codex")}'}]}]`]);
     return { args: resume && sessionId ? ["resume", ...hooks, sessionId] : hooks, env: {} };
   },
+  promptArgs: (p) => [p],
   onHook({ event }) {
     switch (event) {
       case "UserPromptSubmit":
@@ -116,6 +120,7 @@ const antigravity: AgentAdapter = {
   launch({ sessionId, resume }) {
     return { args: resume && sessionId ? ["--conversation", sessionId] : [], env: {} };
   },
+  promptArgs: (p) => ["-i", p], // agy's positional/-p prompt is print mode
   onHook({ event }) {
     switch (event) {
       case "PreInvocation":

@@ -181,9 +181,13 @@
           const plan = adapter.launch({ paths, sessionId, resume });
           ctx.saveState({ launched: true, ...(plan.sessionId ? { sessionId: plan.sessionId } : {}) });
           env = { ...plan.env, COCKPIT_HOOK_PORT: String(reg.port), COCKPIT_HOOK_TOKEN: reg.token };
+          // A routine's first prompt is sent once; a resumed session must not repeat it.
+          const prompt = !resume && typeof ctx.state.prompt === "string" ? ctx.state.prompt : "";
+          if (ctx.state.prompt) ctx.saveState({ prompt: undefined });
           const extra = [
             ...(ctx.settings.agents[adapter.id]?.args ?? []),
             ...((ctx.state.args as string[] | undefined) ?? []),
+            ...(prompt ? adapter.promptArgs(prompt) : []),
           ];
           shell_line = shellLine(adapter.bin, [...plan.args, ...extra], isWindows);
         }

@@ -9,6 +9,7 @@
   import { anyWorking } from "./core/agents.svelte";
   import Sidebar from "./Sidebar.svelte";
   import { startUnityTimeline } from "./core/unityTimeline.svelte";
+  import { startRoutines } from "./core/routines.svelte";
   import { adapters, type AgentId } from "./modules/agents/adapters";
   import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -113,7 +114,6 @@
 
   const notes: Record<string, string> = {
     dashboard: "Özet kartları: ajan durumları, bugünkü rutinler, Unity son olaylar, açık PR'lar.",
-    routines: "Belirli saatte bir ajana prompt gönderen rutinler.",
     cicd: "İçeriği sonra tanımlanacak.",
   };
   /** Sidebar sections are one panel each: focus it if open, else add it to the center. */
@@ -249,6 +249,7 @@
       offs.push(api.onDidActivePanelChange((e) => (active = e.panel?.id.split("-")[0] ?? "")));
       if (api.panels.length === 0) open("dashboard");
       if (terminalOpen && termApi.panels.length === 0) addPanel("terminal");
+      startRoutines((r) => addPanel("terminal", { agent: r.agent, cwd: r.cwd, prompt: r.prompt })).catch(() => {});
       if (import.meta.env.DEV) (window as any).__cockpit = { api, termApi }; // e2e hook
     })();
     // Closing kills agent processes: confirm while one is mid-task (files may be half-written).
