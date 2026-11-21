@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { createDockview, themeAbyss, type DockviewApi } from "dockview-core";
+  import { createDockview, themeAbyss, type DockviewApi } from "dockview";
+  import "dockview/dist/styles/dockview.css";
   import "./modules";
   import { registry, type ModuleCtx } from "./core/module";
   import { loadSettings, type Settings } from "./core/settings";
@@ -112,6 +113,7 @@
         api.clear(); // corrupt or incompatible layout: fall back to default
       }
       if (api.panels.length === 0) addDefault();
+      if (import.meta.env.DEV) (window as any).__cockpit = { api }; // e2e hook
       offs.push(
         api.onDidLayoutChange(scheduleSave),
         api.onWillDragPanel(() => cover(true)),

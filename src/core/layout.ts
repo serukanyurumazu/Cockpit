@@ -1,5 +1,5 @@
 import { load, type Store } from "@tauri-apps/plugin-store";
-import type { SerializedDockview } from "dockview-core";
+import type { SerializedDockview } from "dockview";
 
 // Kept apart from settings.json so a corrupt layout never costs the user their settings.
 let store: Store | null = null;

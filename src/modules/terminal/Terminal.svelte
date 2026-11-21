@@ -35,6 +35,7 @@
         },
       },
     });
+    if (import.meta.env.DEV) ((window as any).__cockpitTerms ??= {})[ctx.paneId] = term; // e2e hook
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(el);
@@ -129,6 +130,7 @@
       el.removeEventListener("paste", onPaste, true);
       exited.then((un) => un());
       pty("kill", {});
+      if (import.meta.env.DEV) delete (window as any).__cockpitTerms?.[ctx.paneId];
       term.dispose();
     };
   });
