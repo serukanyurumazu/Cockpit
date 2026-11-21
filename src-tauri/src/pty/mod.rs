@@ -109,6 +109,21 @@ fn default_shell() -> CommandBuilder {
     c
 }
 
+#[cfg(windows)]
+fn in_shell(line: &str) -> CommandBuilder {
+    let mut c = default_shell();
+    c.args(["-NoExit", "-Command", line]);
+    c
+}
+
+#[cfg(not(windows))]
+fn in_shell(line: &str) -> CommandBuilder {
+    let sh = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+    let mut c = CommandBuilder::new(&sh);
+    c.args(["-l", "-i", "-c", &format!("{line}; exec \"$SHELL\" -l")]);
+    c
+}
+
 fn size(cols: u16, rows: u16) -> PtySize {
     PtySize { rows: rows.max(1), cols: cols.max(1), pixel_width: 0, pixel_height: 0 }
 }
@@ -122,6 +137,8 @@ async fn spawn<R: Runtime>(
     rows: u16,
     cwd: Option<String>,
     program: Option<Vec<String>>,
+    env: Option<HashMap<String, String>>,
+    shell_line: Option<String>,
     on_data: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
     if id.is_empty() || id.len() > 64 {
@@ -132,12 +149,14 @@ async fn spawn<R: Runtime>(
     }
     let pair = native_pty_system().openpty(size(cols, rows)).map_err(|e| e.to_string())?;
 
-    let mut cmd = match program {
-        Some(argv) if !argv.is_empty() => {
+    let mut cmd = match (program, shell_line) {
+        (Some(argv), _) if !argv.is_empty() => {
             let mut c = CommandBuilder::new(&argv[0]);
             c.args(&argv[1..]);
             c
         }
+        // Agents run inside the user's shell (PATH, .cmd shims) and leave the shell open after exit.
+        (_, Some(line)) => in_shell(&line),
         _ => default_shell(),
     };
     match cwd.filter(|d| Path::new(d).is_dir()) {
@@ -150,6 +169,24 @@ async fn spawn<R: Runtime>(
     }
     for k in STRIPPED_ENV {
         cmd.env_remove(k);
+    }
+    let env = env.unwrap_or_default();
+    if env.contains_key(crate::hooks::ENV_TOKEN) {
+        // Hook commands are the constant `cockpit --hook <provider>`; make `cockpit` resolvable.
+        if let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.to_path_buf())) {
+            let mut paths = vec![dir];
+            if let Some(p) = std::env::var_os("PATH") {
+                paths.extend(std::env::split_paths(&p));
+            }
+            if let Ok(joined) = std::env::join_paths(paths) {
+                cmd.env("PATH", joined);
+            }
+        }
+    }
+    for (k, v) in env {
+        if !STRIPPED_ENV.iter().any(|s| s.eq_ignore_ascii_case(&k)) {
+            cmd.env(k, v);
+        }
     }
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");

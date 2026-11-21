@@ -9,6 +9,12 @@ fn main() {
                 .default_permission(DefaultPermissionRule::AllowAllCommands),
         )
         .plugin(
+            "hooks",
+            InlinedPlugin::new()
+                .commands(&["register", "write_config", "unregister"])
+                .default_permission(DefaultPermissionRule::AllowAllCommands),
+        )
+        .plugin(
             "browser",
             InlinedPlugin::new()
                 .commands(&["open", "set_bounds", "navigate", "action"])

@@ -10,6 +10,7 @@
     "opener:default",
     "pty:default",
     "browser:default",
-    "store:default"
+    "store:default",
+    "hooks:default"
   ]
 }
