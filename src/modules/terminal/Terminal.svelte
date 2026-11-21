@@ -135,6 +135,7 @@
     const hooked = adapter
       ? listen<HookSignal & { paneId: string }>("agent:hook", (e) => {
           if (e.payload.paneId !== ctx.paneId) return;
+          if (import.meta.env.DEV) ((window as any).__cockpitHookLog ??= []).push({ t: Date.now(), ...e.payload }); // e2e hook
           if (e.payload.sessionId && !ctx.state.sessionId) ctx.saveState({ sessionId: e.payload.sessionId });
           const s = adapter.onHook(e.payload);
           if (s) setAgentState(ctx.paneId, s);

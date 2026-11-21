@@ -13,7 +13,7 @@ const seen = new Set();
 const paneId = await page.evaluate(({ agent, cwd, args }) => {
   const api = window.__cockpit.api;
   api.clear();
-  const id = "terminal-live-" + agent;
+  const id = "terminal-live-" + agent + "-" + Date.now();
   api.addPanel({ id, component: "terminal", title: agent, params: { agent, cwd, args } });
   return id;
 }, { agent, cwd, args });
@@ -27,13 +27,18 @@ const step = async (name, fn) => {
 await step("session start -> state from hook", async () => {
   return waitFor(async () => {
     const t = await text(paneId);
-    // Claude's folder-trust prompt (default "No, exit"): choose "Yes, I trust this folder".
-    if (/Yes, I trust this folder/.test(t) && !seen.has("trustAnswered")) {
-      seen.add("trustAnswered");
+    // One-time first-run prompts of the CLIs (folder trust, Codex hook review).
+    const answer = async (key, keys) => {
+      if (seen.has(key)) return;
+      seen.add(key);
       await page.evaluate((id) => window.__cockpitTerms[id].focus(), paneId);
-      await page.keyboard.press("ArrowDown");
-      await page.keyboard.press("Enter");
-    }
+      for (const k of keys) await page.keyboard.press(k);
+      await sleep(1500);
+    };
+    const screen = t.slice(-3000);
+    if (/Yes, I trust this folder/.test(screen)) await answer("claudeTrust", ["ArrowDown", "Enter"]);
+    if (/1\. Trust and continue/.test(screen)) await answer("codexTrust", ["Enter"]);
+    if (/2\. Trust all and continue/.test(screen)) await answer("codexHooks", ["ArrowDown", "Enter"]);
     const s = await agentState(paneId);
     return s && s !== "unknown" ? s : null;
   }, 90000, "first hook");
@@ -62,6 +67,7 @@ await step("permission request -> needs_input", async () => {
 });
 
 const params = await page.evaluate((id) => window.__cockpit.api.getPanel(id)?.params, paneId);
+const hooks = await page.evaluate((id) => (window.__cockpitHookLog ?? []).filter((h) => h.paneId === id).map((h) => [h.event, h.notificationType].filter(Boolean).join(":")), paneId);
 clearInterval(watch);
-console.log(JSON.stringify({ paneId, log, params, states: [...seen] }, null, 1));
+console.log(JSON.stringify({ paneId, log, params, states: [...seen], hooks }, null, 1));
 await browser.close();

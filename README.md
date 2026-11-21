@@ -22,3 +22,9 @@ Covers shell I/O, Ctrl+C, flood responsiveness, Ctrl+V text/image, selection cop
 - **M0 (Windows): passed (2026-11-21).** PTY + claude/codex, Ctrl+C, Ctrl+V (text + image), Turkish keyboard, flood output, child browser webview, no orphan processes on force-kill.
 - M0 (macOS): not tested yet.
 - **M1 (Windows): e2e passed (2026-11-21).** Dock layout, browser follows moves and hides behind tabs, layout + browser URL restored after force-kill, no orphan processes. Open: 12-panel RAM measurement (release build), close-confirm (needs M2 agent status).
+- **M2 (Windows), 2026-11-21:**
+  - Hook listener security e2e passed (204 / 403 wrong token, Origin, Host / 413 / page fetch blocked / token dead after unregister).
+  - Claude 2.1.330: idle → working → idle, needs_input on permission, resume after restart (same session id). Passed.
+  - Codex 0.171.0: hooks fire (SessionStart arrives with first prompt), working → idle, session id captured. First launch asks folder trust + one-time hook review (hook command is constant, so review is once). needs_input not observed: default sandbox auto-approves workspace writes.
+  - Gemini 0.70.0: not verified — CLI not logged in yet (run `gemini` once and log in).
+  - Dev-mode note: don't point Codex at this repo while `tauri dev` runs; its Windows sandbox touches file ACLs and the watcher restarts the app.
