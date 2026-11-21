@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addTask, classifyLogLine, parseGitStatus, parseTasks, toggleTask } from "./parse";
+import { addTask, classifyLogLine, parseGitStatus, parseTasks, toggleTask, unityEventParser } from "./parse";
 
 describe("parseGitStatus", () => {
   it("reads branch, ahead/behind and file kinds", () => {
@@ -55,5 +55,35 @@ describe("tasks", () => {
   it("adds tasks, creating a heading for a new file", () => {
     expect(addTask("", "first")).toBe("# Tasks\n\n- [ ] first\n");
     expect(addTask("- [ ] a", "b\nc")).toBe("- [ ] a\n- [ ] b c\n");
+  });
+});
+
+describe("unityEventParser", () => {
+  it("reads compile, build and batch exit lines from a real log sequence", () => {
+    const parse = unityEventParser();
+    const lines = [
+      "*** Tundra build success (1.85 seconds), 11 items updated, 1532 evaluated",
+      "Reloading assemblies after finishing script compilation.",
+      "*** Tundra build failed (0.40 seconds), 2 items updated, 1532 evaluated",
+      "Assets/Player.cs(10,5): error CS0103: The name 'x' does not exist in the current context",
+      "BuildPlayer: start building target 13",
+      "*** Tundra build success (11.96 seconds), 486 items updated, 642 evaluated",
+      "Build Finished, Result: Success.",
+      "Build completed with a result of 'Failed' in 3 seconds (3012 ms)",
+      "Unity çıkış kodu: 1",
+      "  Pass  (vp, vulkan) finished in 0.00 seconds.",
+    ];
+    expect(lines.map(parse)).toEqual([
+      null,
+      { kind: "compile", ok: true, text: "Derleme başarılı (1.85 sn)" },
+      { kind: "compile", ok: false, text: "Derleme hatası" },
+      { detail: "Assets/Player.cs(10,5): error CS0103: The name 'x' does not exist in the current context" },
+      { kind: "build", ok: null, text: "Build başladı (hedef 13)" },
+      null, // Tundra inside a player build is not a script compile
+      { kind: "build", ok: true, text: "Build başarılı" },
+      { kind: "build", ok: false, text: "Build başarısız (Failed)" },
+      { kind: "build", ok: false, text: "Batch build hata kodu 1" },
+      null,
+    ]);
   });
 });

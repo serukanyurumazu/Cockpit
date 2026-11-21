@@ -57,3 +57,46 @@ export function addTask(md: string, text: string): string {
   const body = md.length === 0 ? "# Tasks\n\n" : md.endsWith("\n") ? md : md + "\n";
   return `${body}- [ ] ${text.replace(/\r?\n/g, " ").trim()}\n`;
 }
+
+export interface UnityEvent {
+  t: number;
+  kind: "compile" | "build";
+  /** null: started, not finished yet */
+  ok: boolean | null;
+  text: string;
+  detail?: string[];
+  project?: string;
+}
+
+/**
+ * Turns Unity log lines (Editor.log or batch -logFile - output) into timeline events.
+ * Returns an event, "detail" for a compiler error line belonging to the last failure, or null.
+ * Tundra also runs inside player builds, so script compiles are recognised by the assembly reload.
+ */
+export function unityEventParser() {
+  let tundraSec = "";
+  return (line: string): Omit<UnityEvent, "t"> | { detail: string } | null => {
+    let m: RegExpMatchArray | null;
+    if ((m = line.match(/^\*\*\* Tundra build (?:success|failed) \(([\d.]+) seconds/))) tundraSec = m[1];
+    if (/^\*\*\* Tundra build failed|^Scripts have compiler errors/.test(line)) {
+      tundraSec = "";
+      return { kind: "compile", ok: false, text: "Derleme hatası" };
+    }
+    if (/^Reloading assemblies after (forced synchronous recompile|finishing script compilation)/.test(line)) {
+      const text = tundraSec ? `Derleme başarılı (${tundraSec} sn)` : "Derleme başarılı";
+      tundraSec = "";
+      return { kind: "compile", ok: true, text };
+    }
+    if (/\berror CS\d+/.test(line)) return { detail: line.trim() };
+    if ((m = line.match(/^BuildPlayer: start building target (\w+)/))) return { kind: "build", ok: null, text: `Build başladı (hedef ${m[1]})` };
+    if ((m = line.match(/^Build Finished, Result: (\w+)/)) || (m = line.match(/^Build completed with a result of '(\w+)'/))) {
+      const ok = /^Succe/.test(m[1]);
+      return { kind: "build", ok, text: ok ? "Build başarılı" : `Build başarısız (${m[1]})` };
+    }
+    if ((m = line.match(/^"?Unity çıkış kodu: (-?\d+)/))) {
+      const ok = m[1] === "0";
+      return { kind: "build", ok, text: ok ? "Batch build bitti" : `Batch build hata kodu ${m[1]}` };
+    }
+    return null;
+  };
+}

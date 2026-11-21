@@ -8,6 +8,7 @@
   import { loadLayout, saveLayout } from "./core/layout";
   import { anyWorking } from "./core/agents.svelte";
   import Sidebar from "./Sidebar.svelte";
+  import { startUnityTimeline } from "./core/unityTimeline.svelte";
   import { adapters, type AgentId } from "./modules/agents/adapters";
   import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -113,7 +114,6 @@
   const notes: Record<string, string> = {
     dashboard: "Özet kartları: ajan durumları, bugünkü rutinler, Unity son olaylar, açık PR'lar.",
     routines: "Belirli saatte bir ajana prompt gönderen rutinler.",
-    unity: "Derleme ve build olaylarının zaman çizelgesi.",
     cicd: "İçeriği sonra tanımlanacak.",
   };
   /** Sidebar sections are one panel each: focus it if open, else add it to the center. */
@@ -179,6 +179,7 @@
     const offs: { dispose(): void }[] = [];
     (async () => {
       await invoke("plugin:browser|close_all").catch(() => {}); // orphans from a reload
+      startUnityTimeline().catch(() => {}); // no Editor.log yet is fine
       settings = await loadSettings();
       const saved = await loadLayout();
       const savedTerm = await loadLayout("terminalLayout");

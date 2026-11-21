@@ -10,6 +10,7 @@
   import type { ModuleCtx } from "../../core/module";
   import { adapters, shellLine, type AgentId, type HookSignal } from "../agents/adapters";
   import { agents, setAgentState, trackAgent, untrackAgent } from "../../core/agents.svelte";
+  import { unityFeed } from "../../core/unityTimeline.svelte";
 
   let { ctx }: { ctx: ModuleCtx } = $props();
 
@@ -112,10 +113,22 @@
     };
     el.addEventListener("paste", onPaste, true);
 
+    // A Unity batch build pane also feeds its output to the Unity timeline.
+    const unityBuild = ctx.state.unityBuild as string | undefined;
+    const feed = unityBuild ? unityFeed(unityBuild) : null;
+    const decoder = new TextDecoder();
+    let pendingLine = "";
+
     let unacked = 0;
     const onData = new Channel<ArrayBuffer>();
     onData.onmessage = (buf) => {
       const bytes = new Uint8Array(buf);
+      if (feed) {
+        // ConPTY may move the cursor instead of sending a newline, so cursor moves split lines too.
+        const parts = (pendingLine + decoder.decode(bytes, { stream: true })).split(/\r?\n|\x1b\[\d*(?:;\d*)?H/);
+        pendingLine = parts.pop() ?? "";
+        for (const l of parts) feed(l.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[A-Za-z]/g, ""));
+      }
       term.write(bytes, () => {
         unacked += bytes.length;
         if (unacked >= ACK_EVERY) {

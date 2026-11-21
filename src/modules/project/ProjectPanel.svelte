@@ -3,6 +3,7 @@
   import { Channel, invoke } from "@tauri-apps/api/core";
   import type { ModuleCtx } from "../../core/module";
   import { unityBuildLine } from "../agents/adapters";
+  import { addUnityEvent } from "../../core/unityTimeline.svelte";
   import { addTask, classifyLogLine, parseGitStatus, parseTasks, toggleTask, type GitStatus, type LogLevel } from "./parse";
 
   let { ctx }: { ctx: ModuleCtx } = $props();
@@ -103,7 +104,8 @@
     buildMsg = "";
     ctx.saveState({ buildMethod });
     const folder = path.split(/[\\/]/).filter(Boolean).pop();
-    ctx.openPanel("terminal", { cwd: path, run: unityBuildLine(unity.editor, path, buildMethod, isWindows), title: `Build · ${folder}` });
+    addUnityEvent({ kind: "build", ok: null, text: `Batch build başladı (${buildMethod})`, project: folder });
+    ctx.openPanel("terminal", { cwd: path, run: unityBuildLine(unity.editor, path, buildMethod, isWindows), title: `Build · ${folder}`, unityBuild: folder });
   }
 
   function changeLog(e: SubmitEvent) {
