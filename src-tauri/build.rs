@@ -15,6 +15,15 @@ fn main() {
                 .default_permission(DefaultPermissionRule::AllowAllCommands),
         )
         .plugin(
+            "project",
+            InlinedPlugin::new()
+                .commands(&[
+                    "git_status", "git_stamp", "unity_default_log", "is_unity_project",
+                    "tail_start", "tail_stop", "read_tasks", "write_tasks",
+                ])
+                .default_permission(DefaultPermissionRule::AllowAllCommands),
+        )
+        .plugin(
             "browser",
             InlinedPlugin::new()
                 .commands(&["open", "set_bounds", "navigate", "action"])

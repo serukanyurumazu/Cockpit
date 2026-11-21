@@ -1,5 +1,6 @@
 mod browser;
 mod hooks;
+mod project;
 mod pty;
 
 pub fn hook_forward(args: &[String]) -> i32 {
@@ -16,6 +17,7 @@ pub fn run() {
         .plugin(pty::init())
         .plugin(browser::init())
         .plugin(hooks::init())
+        .plugin(project::init())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
