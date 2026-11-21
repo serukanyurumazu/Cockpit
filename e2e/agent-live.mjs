@@ -36,7 +36,9 @@ await step("session start -> state from hook", async () => {
       await sleep(1500);
     };
     const screen = t.slice(-3000);
-    if (/Yes, I trust this folder/.test(screen)) await answer("claudeTrust", ["ArrowDown", "Enter"]);
+    // Folder trust (Claude defaults to "No, exit", agy to "Yes"): pick Yes based on the cursor.
+    if (/Yes, I trust this folder/.test(screen))
+      await answer("folderTrust", /[>❯]\s*Yes, I trust this folder/.test(screen) ? ["Enter"] : ["ArrowDown", "Enter"]);
     if (/1\. Trust and continue/.test(screen)) await answer("codexTrust", ["Enter"]);
     if (/2\. Trust all and continue/.test(screen)) await answer("codexHooks", ["ArrowDown", "Enter"]);
     const s = await agentState(paneId);
