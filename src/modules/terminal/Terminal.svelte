@@ -206,6 +206,6 @@
 <style>
   .wrap { position: relative; width: 100%; height: 100%; }
   .term { width: 100%; height: 100%; padding: 4px; box-sizing: border-box; }
-  .resume { position: absolute; inset: 0; display: flex; gap: 8px; align-items: center; justify-content: center; background: rgba(22, 24, 29, 0.92); }
+  .resume { position: absolute; inset: 0; z-index: 10; display: flex; gap: 8px; align-items: center; justify-content: center; background: rgba(22, 24, 29, 0.92); }
   .resume button { background: #252830; color: inherit; border: 1px solid #353944; border-radius: 4px; padding: 4px 12px; cursor: pointer; }
 </style>
