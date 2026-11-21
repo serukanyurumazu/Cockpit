@@ -107,6 +107,14 @@ fn str_field(v: &Value, keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|k| v.get(*k).and_then(Value::as_str)).map(|s| s.chars().take(128).collect())
 }
 
+/// Event name: X-Cockpit-Event (Antigravity payloads carry none) if non-empty, else the body's.
+fn event_name(req: &Request, body: &Value) -> Option<String> {
+    req.header("x-cockpit-event")
+        .map(|e| e.chars().filter(char::is_ascii_alphanumeric).take(32).collect::<String>())
+        .filter(|e| !e.is_empty())
+        .or_else(|| str_field(body, &["hook_event_name", "type"]))
+}
+
 fn handle<R: Runtime>(app: &AppHandle<R>, mut stream: TcpStream) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
     let hooks = app.state::<Hooks>();
@@ -122,14 +130,12 @@ fn handle<R: Runtime>(app: &AppHandle<R>, mut stream: TcpStream) {
             .filter(char::is_ascii_alphanumeric)
             .take(16)
             .collect();
-        // Antigravity payloads carry no event name: the forwarder passes it as X-Cockpit-Event.
-        let header_event = req.header("x-cockpit-event").map(|e| e.chars().filter(char::is_ascii_alphanumeric).take(32).collect::<String>());
         let _ = app.emit(
             "agent:hook",
             HookEvent {
                 pane_id,
                 provider,
-                event: header_event.or_else(|| str_field(&body, &["hook_event_name", "type"])),
+                event: event_name(&req, &body),
                 notification_type: str_field(&body, &["notification_type"]),
                 session_id: str_field(&body, &["session_id", "thread-id", "thread_id", "conversationId"]),
             },
@@ -295,6 +301,15 @@ mod tests {
         assert_eq!(check(&req(&OK.replace("POST", "GET")).unwrap(), 4000), Err(405));
         assert_eq!(check(&req(&OK.replace("X-Cockpit-Token: abc\r\n", "")).unwrap(), 4000), Err(403));
         assert_eq!(check(&req(&OK.replace("/hook", "/x")).unwrap(), 4000), Err(404));
+    }
+
+    #[test]
+    fn event_name_prefers_nonempty_header() {
+        let body: Value = serde_json::json!({ "hook_event_name": "Stop" });
+        let with = |h: &str| req(&OK.replacen("\r\n\r\n", &format!("\r\nX-Cockpit-Event: {h}\r\n\r\n"), 1)).unwrap();
+        assert_eq!(event_name(&with(""), &body).as_deref(), Some("Stop"), "empty header must not hide the body event");
+        assert_eq!(event_name(&with("PreInvocation"), &body).as_deref(), Some("PreInvocation"));
+        assert_eq!(event_name(&req(OK).unwrap(), &body).as_deref(), Some("Stop"));
     }
 
     #[test]
