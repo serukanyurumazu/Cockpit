@@ -19,7 +19,7 @@ fn main() {
             InlinedPlugin::new()
                 .commands(&[
                     "git_status", "git_stamp", "unity_default_log", "is_unity_project",
-                    "tail_start", "tail_stop", "read_tasks", "write_tasks", "unity_info",
+                    "tail_start", "tail_stop", "read_tasks", "write_tasks", "unity_info", "create_worktree",
                 ])
                 .default_permission(DefaultPermissionRule::AllowAllCommands),
         )

@@ -39,3 +39,11 @@ Covers shell I/O, Ctrl+C, flood responsiveness, Ctrl+V text/image, selection cop
 - **M5 release (Windows), 2026-11-21:** NSIS installer 2.60 MiB (WebView2 download bootstrapper, per-user install), exe 7.6 MB. Idle after 60 s with 7 terminal tabs (1 visible): app + WebView2 108–111 MB private working set (2 clean runs); shells reported separately, ~34 MB per Windows PowerShell. One outlier run measured 464 MB with 29 processes; cause not confirmed (likely an extra webview from a restored layout). Hook forwarder works from the GUI-subsystem exe (~35 ms). `e2e/release.mjs`.
 - Fixed: since the Antigravity change, an empty X-Cockpit-Event header hid Claude/Codex event names (status never updated). Unit-tested now.
 - **M5 Unity build (Windows), 2026-11-21:** e2e against a real Unity 6000.3.26f1 project: Build opens a terminal below the Proje panel, streams `-logFile -` output, prints the exit code (0 for success, 3 for a forced failure); build refused while `Temp/UnityLockfile` is held by an editor; invalid `-executeMethod` rejected. Unity MCP status shows the CoplayDev package and which agent CLIs have a unity MCP server configured (detect only).
+- **M5 worktrees, 2026-11-21:** launching an agent in a git repo asks for a separate worktree (`<parent>/<project>-worktrees/<agent-time>`, branch `cockpit/…`), with a Library/ re-import warning for Unity projects. Command tested (branch created, main untouched, duplicate / `../` / flag-like names rejected); the native dialog itself is not automated.
+- **macOS:** bundle targets (`app`, `dmg`) are configured but nothing has been built or run on a Mac yet. Build there with `pnpm tauri build` (universal: `--target universal-apple-darwin` after adding both Rust targets).
+
+## Building
+```
+pnpm install
+pnpm tauri build            # Windows: src-tauri/target/release/bundle/nsis/*.exe (~2.6 MB)
+```

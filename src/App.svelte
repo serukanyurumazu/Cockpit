@@ -55,7 +55,28 @@
 
   async function addAgent(agent: AgentId) {
     const dir = await pickFolder(`${adapters[agent].title}: proje klasörü`);
-    if (dir) addPanel("terminal", { agent, cwd: dir });
+    if (!dir) return;
+    let cwd = dir;
+    const isRepo = await invoke("plugin:project|git_status", { path: dir, untracked: false }).then(() => true, () => false);
+    if (isRepo) {
+      const unity = await invoke<boolean>("plugin:project|is_unity_project", { path: dir });
+      cover(true);
+      const separate = await ask(
+        "Ajan ayrı bir git worktree'de (yeni dal: cockpit/…) çalışsın mı? Böylece ana çalışma kopyan değişmez; birleştirmeyi git ile sen yaparsın." +
+          (unity ? "\n\nUnity: Library/ yeni worktree'de yeniden içe aktarılır. İlk açılış dakikalar sürebilir ve birkaç GB disk kullanır." : ""),
+        { title: "Worktree", kind: "info", okLabel: "Ayrı worktree", cancelLabel: "Aynı klasör" },
+      );
+      cover(false);
+      if (separate) {
+        const name = `${agent}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`;
+        try {
+          cwd = await invoke<string>("plugin:project|create_worktree", { path: dir, name });
+        } catch (e) {
+          await ask(`Worktree oluşturulamadı: ${e}\n\nAynı klasörde devam edilsin mi?`, { title: "Worktree", kind: "warning" }).then((ok) => { if (!ok) throw e; });
+        }
+      }
+    }
+    addPanel("terminal", { agent, cwd });
   }
 
   async function addBrain() {

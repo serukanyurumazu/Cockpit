@@ -239,6 +239,30 @@ async fn unity_info<R: Runtime>(app: AppHandle<R>, path: String) -> Result<Unity
     })
 }
 
+/// Creates `<parent>/<project>-worktrees/<name>` on a new branch `cockpit/<name>` so an agent works
+/// in isolation. Returns the worktree path. Merging back is left to the user (normal git).
+#[tauri::command]
+async fn create_worktree(path: String, name: String) -> Result<String, String> {
+    if name.is_empty() || name.len() > 64 || !name.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c)) || name.starts_with(['.', '-']) {
+        return Err(format!("invalid worktree name: {name}"));
+    }
+    let dir = project_dir(&path)?;
+    let project = dir.file_name().ok_or("bad project path")?.to_string_lossy().into_owned();
+    let target = dir.parent().ok_or("project has no parent folder")?.join(format!("{project}-worktrees")).join(&name);
+    if target.exists() {
+        return Err(format!("already exists: {}", target.display()));
+    }
+    let out = git(&dir)
+        .args(["worktree", "add", "-b", &format!("cockpit/{name}")])
+        .arg(&target)
+        .output()
+        .map_err(|e| format!("git: {e}"))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    Ok(target.to_string_lossy().into_owned())
+}
+
 fn tasks_file(path: &str) -> Result<PathBuf, String> {
     Ok(project_dir(path)?.join(".cockpit").join("brain").join("TASKS.md"))
 }
@@ -271,7 +295,7 @@ async fn write_tasks(path: String, expected: String, content: String) -> Result<
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("project")
         .invoke_handler(tauri::generate_handler![
-            git_status, git_stamp, unity_default_log, is_unity_project, tail_start, tail_stop, read_tasks, write_tasks, unity_info
+            git_status, git_stamp, unity_default_log, is_unity_project, tail_start, tail_stop, read_tasks, write_tasks, unity_info, create_worktree
         ])
         .setup(|app, _| {
             app.manage(Tails::default());

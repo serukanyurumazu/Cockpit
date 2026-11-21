@@ -1,0 +1,24 @@
+// create_worktree: valid name -> new branch + folder; bad/duplicate names rejected.
+import fs from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { connect } from "./lib.mjs";
+const repo = path.join(process.argv[2], "wt-repo-" + Date.now());
+fs.mkdirSync(repo);
+const git = (...a) => execFileSync("git", a, { cwd: repo, encoding: "utf8" });
+git("init", "-q", "-b", "main");
+fs.writeFileSync(path.join(repo, "a.txt"), "a");
+git("-c", "user.name=t", "-c", "user.email=t@t", "add", ".");
+git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init");
+const { browser, page } = await connect();
+const inv = (args) => page.evaluate((a) => window.__TAURI_INTERNALS__.invoke("plugin:project|create_worktree", a).then((v) => ({ ok: v }), (e) => ({ err: String(e) })), args);
+const out = {};
+out.created = await inv({ path: repo, name: "claude-test" });
+out.branch = out.created.ok && git("-C", out.created.ok, "branch", "--show-current").trim();
+out.list = git("worktree", "list").trim().split("\n").length;
+out.mainUntouched = git("branch", "--show-current").trim();
+out.duplicate = await inv({ path: repo, name: "claude-test" });
+out.traversal = await inv({ path: repo, name: "../evil" });
+out.flag = await inv({ path: repo, name: "-b" });
+console.log(JSON.stringify(out, null, 1));
+await browser.close();
