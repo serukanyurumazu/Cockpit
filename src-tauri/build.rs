@@ -7,6 +7,12 @@ fn main() {
             InlinedPlugin::new()
                 .commands(&["spawn", "write", "resize", "ack", "kill"])
                 .default_permission(DefaultPermissionRule::AllowAllCommands),
+        )
+        .plugin(
+            "browser",
+            InlinedPlugin::new()
+                .commands(&["open", "set_bounds", "navigate", "action"])
+                .default_permission(DefaultPermissionRule::AllowAllCommands),
         ),
     )
     .expect("failed to run tauri-build");
