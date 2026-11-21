@@ -34,3 +34,5 @@ Covers shell I/O, Ctrl+C, flood responsiveness, Ctrl+V text/image, selection cop
   - TASKS.md (`<project>/.cockpit/brain/`): add, toggle, external edits reload, stale write refused without losing the agent's lines.
   - Browser isolation: page has no `__TAURI__`; `pty`/`hooks`/`project` commands rejected by ACL for the browser webview; `file:` navigation blocked.
   - Not yet verified on macOS (`~/Library/Logs/Unity/Editor.log`).
+- **M4 (Windows), 2026-11-21:** e2e passed (12 checks). Agent-written note searchable in ~0.3 s; Turkish prefix search; create/edit/Ctrl+S; backlinks; conflict keeps both versions; open note picks up agent edits; rename drops old entry; deleting the index db rebuilds the same results; two vaults with the same note name stay separate; preview runs no scripts and loads no remote images; agent pointer added to AGENTS.md once.
+- Fixed: a page reload (HMR/F5) left native browser webviews painted over the UI; startup now closes stale ones (e2e/reload-orphans.mjs).

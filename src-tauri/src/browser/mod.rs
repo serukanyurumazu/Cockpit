@@ -131,8 +131,24 @@ async fn action<R: Runtime>(app: AppHandle<R>, label: String, action: String) ->
     r.map_err(|e| e.to_string())
 }
 
+/// Closes every browser webview. Called when the UI (re)loads: a page reload or HMR skips
+/// component cleanup, and the native child webviews would otherwise stay painted on top.
+#[tauri::command]
+async fn close_all<R: Runtime>(app: AppHandle<R>) -> Result<usize, String> {
+    let stale: Vec<_> = app.webviews().into_iter().filter(|(l, _)| l.starts_with(PREFIX)).map(|(_, w)| w).collect();
+    for w in &stale {
+        let _ = w.close();
+    }
+    Ok(stale.len())
+}
+
+#[tauri::command]
+async fn labels<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
+    app.webviews().into_keys().filter(|l| l.starts_with(PREFIX)).collect()
+}
+
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("browser")
-        .invoke_handler(tauri::generate_handler![open, set_bounds, navigate, action])
+        .invoke_handler(tauri::generate_handler![open, set_bounds, navigate, action, close_all, labels])
         .build()
 }

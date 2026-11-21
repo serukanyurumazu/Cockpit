@@ -10,6 +10,7 @@
   import { adapters, type AgentId } from "./modules/agents/adapters";
   import { ask, open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { invoke } from "@tauri-apps/api/core";
 
   let host: HTMLDivElement;
   let api: DockviewApi | null = null;
@@ -53,6 +54,13 @@
     if (dir) addPanel("terminal", { agent, cwd: dir });
   }
 
+  async function addBrain() {
+    const dir = await pickFolder("Beyin: proje klasörü (notlar .cockpit/brain içinde)");
+    if (!dir) return;
+    const vault = await invoke<string>("plugin:brain|vault_for_project", { project: dir });
+    addPanel("brain", { vault, project: dir });
+  }
+
   async function addProject() {
     const dir = await pickFolder("Proje klasörü");
     if (dir) addPanel("project", { path: dir });
@@ -93,6 +101,7 @@
     let disposed = false;
     const offs: { dispose(): void }[] = [];
     (async () => {
+      await invoke("plugin:browser|close_all").catch(() => {}); // orphans from a reload
       settings = await loadSettings();
       const saved = await loadLayout();
       if (disposed) return;
@@ -181,6 +190,7 @@
     <button title="{shortcut}T" onclick={() => addPanel("terminal")}>+ Terminal</button>
     <button title="{shortcut}B" onclick={() => addPanel("browser")}>+ Tarayıcı</button>
     <button onclick={addProject}>+ Proje</button>
+    <button onclick={addBrain}>+ Beyin</button>
     <span class="sep"></span>
     {#each Object.values(adapters) as a (a.id)}
       <button onclick={() => addAgent(a.id)}>+ {a.title}</button>

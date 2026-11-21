@@ -32,7 +32,7 @@ fn main() {
         .plugin(
             "browser",
             InlinedPlugin::new()
-                .commands(&["open", "set_bounds", "navigate", "action"])
+                .commands(&["open", "set_bounds", "navigate", "action", "close_all", "labels"])
                 .default_permission(DefaultPermissionRule::AllowAllCommands),
         ),
     )
